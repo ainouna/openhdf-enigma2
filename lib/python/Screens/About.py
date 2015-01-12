@@ -49,7 +49,7 @@ class About(Screen):
 		AboutText += _("Model:\t%s %s\n") % (getMachineBrand(), getMachineName())
 
 		if path.exists('/proc/stb/info/chipset'):
-			AboutText += _("Chipset:\tBCM%s") % about.getChipSetString() + "\n"
+			AboutText += _("Chipset:\t%s") % about.getChipSetString() + "\n"
 
 		cmd = 'cat /proc/cpuinfo | grep "cpu MHz" -m 1 | awk -F ": " ' + "'{print $2}'"
 		cmd2 = 'cat /proc/cpuinfo | grep "BogoMIPS" -m 1 | awk -F ": " ' + "'{print $2}'"
