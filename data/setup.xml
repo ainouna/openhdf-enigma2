@@ -120,6 +120,7 @@
 		<item level="2" text="External subtitle color" description="Configure the color of the external subtitles, alternative (normal in white, italic in yellow, bold in cyan, underscore in green), white or yellow.">config.subtitles.pango_subtitle_colors</item>
 		<item level="2" text="Delay for external subtitles" description="Configure an additional delay to improve external subtitle synchronisation.">config.subtitles.pango_subtitles_delay</item>
 		<item level="2" text="Set fps for external subtitles" description="Can be used for different fps between external subtitles and video.">config.subtitles.pango_subtitles_fps</item>
+		<item level="2" text="HI-cleanup for external subtitles" description="Remove texts for the hearing impaired from external subtitles (instrumental music or environmental sounds, e.g., when a doorbell rings or a gun shot is heard).">config.subtitles.pango_subtitle_removehi</item>
 		<item level="2" text="Automatically turn on external subtitles" description="When enabled, external subtitles will be always turned on for playback movie.">config.subtitles.pango_autoturnon</item>
 	</setup>
 	<setup key="autolanguagesetup" title="Auto language selection">
@@ -202,6 +203,7 @@
 		<item level="0" text="Keyboard map">config.keyboard.keymap</item>
 	</setup>
 	<setup key="display" title="Display Settings" requires="FrontpanelDisplay">
+		<item level="0" requires="FBLCDDisplay" text="Clone TV screen to LCD" description="Shows live tv or informations on LCD.">config.lcd.fblcddisplay</item>
 		<item level="0" text="Brightness (Normal)" description="Configure the brightness level of the front panel displa for normal operation.">config.lcd.bright</item>
 		<item level="0" text="Brightness (Standby)" description="Configure the brightness level of the front panel displa for standby.">config.lcd.standby</item>
 		<item level="0" text="Contrast" description="Configure the contrast level of the front panel display.">config.lcd.contrast</item>
@@ -241,6 +243,7 @@
 		<item level="1" text="Background check" description="Perform an online update check in the background">config.softwareupdate.check</item>
 		<item level="1" text="Check every (hours)" description="Setup the interval to check for online updates. (in hours)" requires="config.softwareupdate.check">config.softwareupdate.checktimer</item>
 		<item level="1" text="Allow unstable (untested) updates" description="When enabled the online checker will also check for experimental versions">config.softwareupdate.updatebeta</item>
+		<item level="1" text="Disable all updates*" description="When enabled the opkg status file will be renamed and all future updates can not be installed. Please restart Enigma2 after the change this option.">config.softwareupdate.disableupdates</item>
 		<!--item level="1" text="Automatic setting backup" description="Perform a setting backup before updating.">config.softwareupdate.autosettingsbackup</item-->
 		<!--item level="1" text="Automatic image backup" description="Perform a image backup before updating.">config.softwareupdate.autoimagebackup</item-->
 
@@ -304,6 +307,9 @@
 		<item level="2" text="Stop timeshift while recording?" description="Stop's timeshift being used if a recording is in progress. (adviseable for usb sticks)">config.timeshift.stopwhilerecording</item>
 		<item level="2" text="Use timeshift seekbar while timeshifting?" description="If set to 'yes', allows you use the seekbar to jump to a point within the event.">config.timeshift.showinfobar</item>
 		<item level="2" text="Timeshift buffer limit [in hours]" description="Older files in the timeshift directory are removed on every event change.">config.timeshift.timeshiftMaxHours</item>
+		<item level="2" text="Timeshift last events limit [number of events]" description="'Buffer in hours' or 'number of last events'. Priority has the condition for deleting older timeshift files which is first occurred.">config.timeshift.timeshiftMaxEvents</item>
+		<item level="2" text="Timeshift checking for older files [in minutes]" description="In addition the check by an event start can a repetitive check are used. So will the condition 'buffer limit in hours' or 'check free space' earlier detected.">config.timeshift.timeshiftCheckEvents</item>
+		<item level="2" text="Timeshift checking for free space?" description="If the free space is less than 1024 MB, then an attempt is made to delete the old timeshift files">config.timeshift.timeshiftCheckFreeSpace</item>
 		<item level="2" text="Timeshift buffer delete after zap?" description="If set to 'no', can you save older events even after zapping or interruption of the timeshift.">config.timeshift.deleteAfterZap</item>
 	</setup>
 	<setup key="epgsingle" title="ChannelEPG settings">

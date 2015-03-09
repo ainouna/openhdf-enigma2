@@ -464,7 +464,7 @@ eServiceMP3::eServiceMP3(eServiceReference ref):
 		m_sourceinfo.audiotype = atMP3;
 	else if ( strcasecmp(ext, ".wma") == 0 )
 		m_sourceinfo.audiotype = atWMA;
-	else if ( (strncmp(filename, "/autofs/", 8) || strncmp(filename+strlen(filename)-13, "/track-", 7) || strcasecmp(ext, ".wav")) == 0 )
+	else if ( (strncmp(filename, "/media/sr", 9) || strncmp(filename+strlen(filename)-13, "/track-", 7) || strcasecmp(ext, ".wav")) == 0 )
 		m_sourceinfo.containertype = ctCDA;
 	if ( strcasecmp(ext, ".dat") == 0 )
 	{
@@ -559,7 +559,8 @@ eServiceMP3::eServiceMP3(eServiceReference ref):
 			 */
 			flags |= GST_PLAY_FLAG_BUFFERING;
 			/* increase the default 2 second / 2 MB buffer limitations to 5s / 5MB */
-			g_object_set(G_OBJECT(m_gst_playbin), "buffer-duration", 5LL * GST_SECOND, NULL);
+			/*g_object_set(G_OBJECT(m_gst_playbin), "buffer-duration", 5LL * GST_SECOND, NULL);*/
+			g_object_set(G_OBJECT(m_gst_playbin), "buffer-duration", 0, NULL);
 			g_object_set(G_OBJECT(m_gst_playbin), "buffer-size", m_buffer_size, NULL);
 		}
 		g_object_set (G_OBJECT (m_gst_playbin), "flags", flags, NULL);
@@ -2289,13 +2290,6 @@ void eServiceMP3::pullSubtitle(GstBuffer *buffer)
 		{
 			if ( subType < stVOB )
 			{
-				int delay = eConfigManager::getConfigIntValue("config.subtitles.pango_subtitles_delay");
-				int subtitle_fps = eConfigManager::getConfigIntValue("config.subtitles.pango_subtitles_fps");
-
-				double convert_fps = 1.0;
-				if (subtitle_fps > 1 && m_framerate > 0)
-					convert_fps = subtitle_fps / (double)m_framerate;
-
 #if GST_VERSION_MAJOR < 1
 				std::string line((const char*)GST_BUFFER_DATA(buffer), len);
 #else
@@ -2303,7 +2297,7 @@ void eServiceMP3::pullSubtitle(GstBuffer *buffer)
 #endif
 				// eDebug("got new text subtitle @ buf_pos = %lld ns (in pts=%lld), dur=%lld: '%s' ", buf_pos, buf_pos/11111, duration_ns, line.c_str());
 
-				uint32_t start_ms = ((buf_pos / 1000000ULL) * convert_fps) + delay;
+				uint32_t start_ms = buf_pos / 1000000ULL;
 				uint32_t end_ms = start_ms + (duration_ns / 1000000ULL);
 				m_subtitle_pages.insert(subtitle_pages_map_pair_t(end_ms, subtitle_page_t(start_ms, end_ms, line)));
 				m_subtitle_sync_timer->start(1, true);
@@ -2322,7 +2316,8 @@ void eServiceMP3::pullSubtitle(GstBuffer *buffer)
 void eServiceMP3::pushSubtitles()
 {
 	pts_t running_pts = 0;
-	int32_t next_timer = 0, decoder_ms, start_ms, end_ms, diff_start_ms, diff_end_ms;
+	int32_t next_timer = 0, decoder_ms, start_ms, end_ms, diff_start_ms, diff_end_ms, delay_ms;
+	double convert_fps = 1.0;
 	subtitle_pages_map_t::iterator current;
 
 	// wait until clock is stable
@@ -2349,6 +2344,7 @@ void eServiceMP3::pushSubtitles()
 	}
 
 	decoder_ms = running_pts / 90;
+	delay_ms = 0;
 
 #if 0
 		// eDebug("\n*** all subs: ");
@@ -2367,10 +2363,20 @@ void eServiceMP3::pushSubtitles()
 		// eDebug("\n\n");
 #endif
 
-	for (current = m_subtitle_pages.lower_bound(decoder_ms); current != m_subtitle_pages.end(); current++)
+	if (m_currentSubtitleStream >= 0 && m_currentSubtitleStream < (int)m_subtitleStreams.size() &&
+		m_subtitleStreams[m_currentSubtitleStream].type &&
+		m_subtitleStreams[m_currentSubtitleStream].type < stVOB)
 	{
-		start_ms = current->second.start_ms;
-		end_ms = current->second.end_ms;
+		delay_ms = eConfigManager::getConfigIntValue("config.subtitles.pango_subtitles_delay") / 90;
+		int subtitle_fps = eConfigManager::getConfigIntValue("config.subtitles.pango_subtitles_fps");
+		if (subtitle_fps > 1 && m_framerate > 0)
+			convert_fps = subtitle_fps / (double)m_framerate;
+	}
+
+	for (current = m_subtitle_pages.begin(); current != m_subtitle_pages.end(); current++)
+	{
+		start_ms = (current->second.start_ms * convert_fps) + delay_ms;
+		end_ms = (current->second.end_ms * convert_fps) + delay_ms;
 		diff_start_ms = start_ms - decoder_ms;
 		diff_end_ms = end_ms - decoder_ms;
 

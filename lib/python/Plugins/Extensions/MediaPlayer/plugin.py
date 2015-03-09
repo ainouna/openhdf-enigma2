@@ -3,7 +3,7 @@ from time import strftime
 import random
 from boxbranding import getMachineBrand, getMachineName
 
-from enigma import iPlayableService, eTimer, eServiceCenter, iServiceInformation, ePicLoad
+from enigma import iPlayableService, eTimer, eServiceCenter, iServiceInformation, ePicLoad, eServiceReference
 
 from ServiceReference import ServiceReference
 from Screens.Screen import Screen
@@ -12,7 +12,7 @@ from Screens.MessageBox import MessageBox
 from Screens.InputBox import InputBox
 from Screens.ChoiceBox import ChoiceBox
 from Screens.InfoBar import InfoBar
-from Screens.InfoBarGenerics import InfoBarSeek, InfoBarScreenSaver, InfoBarAudioSelection, InfoBarCueSheetSupport, InfoBarNotifications, InfoBarSubtitleSupport
+from Screens.InfoBarGenerics import InfoBarSeek, InfoBarScreenSaver, InfoBarAudioSelection, InfoBarAspectSelection, InfoBarCueSheetSupport, InfoBarNotifications, InfoBarSubtitleSupport
 from Components.ActionMap import NumberActionMap, HelpableActionMap
 from Components.Label import Label
 from Components.Pixmap import Pixmap,MultiPixmap
@@ -100,13 +100,14 @@ class MediaPlayerInfoBar(Screen):
 		Screen.__init__(self, session)
 		self.skinName = "MoviePlayer"
 
-class MediaPlayer(Screen, InfoBarBase, InfoBarScreenSaver, InfoBarSeek, InfoBarAudioSelection, InfoBarCueSheetSupport, InfoBarNotifications, InfoBarSubtitleSupport, HelpableScreen):
+class MediaPlayer(Screen, InfoBarBase, InfoBarScreenSaver, InfoBarSeek, InfoBarAudioSelection, InfoBarAspectSelection, InfoBarCueSheetSupport, InfoBarNotifications, InfoBarSubtitleSupport, HelpableScreen):
 	ALLOW_SUSPEND = True
 	ENABLE_RESUME_SUPPORT = True
 
 	def __init__(self, session, args = None):
 		Screen.__init__(self, session)
 		InfoBarAudioSelection.__init__(self)
+		InfoBarAspectSelection.__init__(self)
 		InfoBarCueSheetSupport.__init__(self, actionmap = "MediaPlayerCueSheetActions")
 		InfoBarNotifications.__init__(self)
 		InfoBarBase.__init__(self)
@@ -318,7 +319,8 @@ class MediaPlayer(Screen, InfoBarBase, InfoBarScreenSaver, InfoBarSeek, InfoBarA
 		sTagTrackNumber = currPlay.info().getInfo(iServiceInformation.sTagTrackNumber)
 		sTagTrackCount = currPlay.info().getInfo(iServiceInformation.sTagTrackCount)
 		sTagTitle = currPlay.info().getInfoString(iServiceInformation.sTagTitle)
-		print "[__evUpdatedInfo] title %d of %d (%s)" % (sTagTrackNumber, sTagTrackCount, sTagTitle)
+		if sTagTrackNumber or sTagTrackCount or sTagTitle:
+			print "[__evUpdatedInfo] title %d of %d (%s)" % (sTagTrackNumber, sTagTrackCount, sTagTitle)
 		self.readTitleInformation()
 
 	def __evAudioDecodeError(self):
@@ -823,6 +825,18 @@ class MediaPlayer(Screen, InfoBarBase, InfoBarScreenSaver, InfoBarSeek, InfoBarA
 				for x in list:
 					self.playlist.addFile(x.ref)
 			self.playlist.updateList()
+		# check if MerlinMusicPlayer is installed and merlinmp3player.so is running
+		# so we need the right id to play now the mp3-file
+		elif self.filelist.getServiceRef().type == 4116:
+				if self.filelist.getSelection() is not None:
+					inst = self.filelist.getSelection()[0]
+					if isinstance(inst, eServiceReference):
+						path = inst.getPath()
+						service = eServiceReference(4097, 0, path)
+						self.playlist.addFile(service)
+						self.playlist.updateList()
+						if len(self.playlist) == 1:
+							self.changeEntry(0)
 		else:
 			self.playlist.addFile(self.filelist.getServiceRef())
 			self.playlist.updateList()
@@ -958,11 +972,16 @@ class MediaPlayer(Screen, InfoBarBase, InfoBarScreenSaver, InfoBarSeek, InfoBarA
 			self.playlist.rewindFile()
 
 	def pauseEntry(self):
-		self.pauseService()
-		if self.seekstate == self.SEEK_STATE_PAUSE:
-			self.show()
+		if self.currList == "playlist" and self.seekstate == self.SEEK_STATE_PAUSE:
+			self.playEntry()
+		elif self.isStateForward(self.seekstate) or self.isStateBackward(self.seekstate):
+			self.playEntry()
 		else:
-			self.hideAndInfoBar()
+			self.pauseService()
+			if self.seekstate == self.SEEK_STATE_PAUSE:
+				self.show()
+			else:
+				self.hideAndInfoBar()
 
 	def stopEntry(self):
 		self.playlist.stopFile()
@@ -1127,6 +1146,6 @@ from Plugins.Plugin import PluginDescriptor
 def Plugins(**kwargs):
 	return [
 		PluginDescriptor(name = _("Media player"), description = _("Play back media files"), where = PluginDescriptor.WHERE_PLUGINMENU, icon="MediaPlayer.png", needsRestart = False, fnc = main),
-		PluginDescriptor(name = _("Media player"), where = PluginDescriptor.WHERE_FILESCAN, needsRestart = False, fnc = filescan),
+		#PluginDescriptor(name = _("Media player"), where = PluginDescriptor.WHERE_FILESCAN, needsRestart = False, fnc = filescan),
 		PluginDescriptor(name = _("Media player"), description = _("Play back media files"), where = PluginDescriptor.WHERE_MENU, needsRestart = False, fnc = menu)
 	]
