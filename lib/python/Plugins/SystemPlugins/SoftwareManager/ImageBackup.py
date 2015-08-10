@@ -19,7 +19,7 @@ import commands
 import datetime
 from boxbranding import getBoxType, getMachineBrand, getMachineName, getDriverDate, getImageVersion, getImageBuild, getBrandOEM, getMachineBuild, getImageFolder, getMachineUBINIZE, getMachineMKUBIFS, getMachineMtdKernel, getMachineKernelFile, getMachineRootFile, getImageFileSystem
 
-VERSION = "Version 4.0 borrowed from openATV"
+VERSION = "Version 4.1 borrowed from openATV"
 
 def Freespace(dev):
 	statdev = statvfs(dev)
@@ -52,6 +52,8 @@ class ImageBackup(Screen):
 		self.MACHINENAME = getMachineName()
 		self.MACHINEBRAND = getMachineBrand()
 		self.IMAGEFOLDER = getImageFolder()
+		self.HDFIMAGEVERSION = getImageVersion()
+		self.HDFIMAGEBUILD = getImageBuild()
 		self.UBINIZE_ARGS = getMachineUBINIZE()
 		self.MKUBIFS_ARGS = getMachineMKUBIFS()
 		self.MTDKERNEL = getMachineMtdKernel()
@@ -162,23 +164,22 @@ class ImageBackup(Screen):
 		self.SHOWNAME = "%s %s" %(self.MACHINEBRAND, self.MODEL)
 		self.MAINDESTOLD = "%s/%s" %(self.DIRECTORY, self.MODEL)
 		self.MAINDEST = "%s/%s" %(self.DIRECTORY,self.IMAGEFOLDER)
-		self.EXTRA = "%s/fullbackup_%s/%s" % (self.DIRECTORY, self.IMAGEFOLDER, self.DATE)
+		self.EXTRA = "%s/fullbackup_%s_%s/%s_build_%s" % (self.DIRECTORY, self.IMAGEFOLDER, self.HDFIMAGEVERSION, self.DATE, self.HDFIMAGEBUILD)
 		self.EXTRAOLD = "%s/fullbackup_%s/%s/%s" % (self.DIRECTORY, self.MODEL, self.DATE, self.MODEL)
 
 		self.message = "echo -e '\n"
 		self.message += (_("Back-up Tool for a %s\n" %self.SHOWNAME)).upper()
 		self.message += VERSION + '\n'
-		self.message += "_________________________________________________\n\n"
-		self.message += _("Please be patient, a backup will now be made,\n")
-		self.message += _("\n")
-		#self.message += _("If you want to watch TV while backup is running,\n")
-		#self.message += _("press the yellow key to toggle the screen.\n")
+		self.message += _("Please be patient, a backup will now be made.\n")
+		self.message += "____________________________________________________________\n\n"
+		self.message += _("If you want to watch TV while backup is running,\n")
+		self.message += _("press yellow button twice to toggle between backup and TV.\n")
+		self.message += "____________________________________________________________\n\n"
 		if self.ROOTFSTYPE == "ubifs":
 			self.message += _("because of the used filesystem the back-up\n")
 			self.message += _("will take about 3-12 minutes for this system\n")
 		else:
 			self.message += _("This will take between 2 and 9 minutes\n")
-		self.message += "\n_________________________________________________\n\n"
 		self.message += "'"
 
 		## PREPARING THE BUILDING ENVIRONMENT
@@ -240,9 +241,10 @@ class ImageBackup(Screen):
 		cmdlist.append(self.message)
 		cmdlist.append('echo "Kernel dump OK"')
 		cmdlist.append("rm -rf /tmp/vmlinux.bin")
-		cmdlist.append('echo "_________________________________________________"')
+		cmdlist.append('echo "_________________________________________________________\n"')
 		cmdlist.append('echo "Almost there... "')
 		cmdlist.append('echo "Now building the USB-Image"')
+		cmdlist.append('echo "\n"')
 
 		system('rm -rf %s' %self.MAINDEST)
 		if not path.exists(self.MAINDEST):
@@ -293,19 +295,16 @@ class ImageBackup(Screen):
 			file_found = False
 
 		if file_found:
-			cmdlist.append('echo "_________________________________________________\n"')
+			cmdlist.append('echo "_________________________________________________________\n"')
 			cmdlist.append('echo "USB Image created on:" %s' %self.MAINDEST)
 			cmdlist.append('echo "and there is made an extra copy on:"')
 			cmdlist.append('echo %s' %self.EXTRA)
-			cmdlist.append('echo "_________________________________________________\n"')
-			cmdlist.append('echo " "')
+			cmdlist.append('echo "_________________________________________________________\n"')
 			cmdlist.append('echo "\nPlease wait...almost ready! "')
 			cmdlist.append('echo " "')
-			cmdlist.append('echo "To restore the image:"')
-			cmdlist.append('echo "Please check the manual of the receiver"')
-			cmdlist.append('echo "on how to restore the image"')
+			cmdlist.append('echo "To restore the image: check the manual of the receiver"')
 		else:
-			cmdlist.append('echo "_________________________________________________\n"')
+			cmdlist.append('echo "_________________________________________________________\n"')
 			cmdlist.append('echo "Image creation failed - "')
 			cmdlist.append('echo "Probable causes could be"')
 			cmdlist.append('echo "     wrong back-up destination "')
@@ -319,7 +318,7 @@ class ImageBackup(Screen):
 			if self.TARGET == 'XX':
 				cmdlist.append('echo " "')
 			else:
-				cmdlist.append('echo "_________________________________________________\n"')
+				cmdlist.append('echo "_________________________________________________________\n"')
 				cmdlist.append('echo " "')
 				cmdlist.append('echo "There is a valid USB-flash drive detected in one "')
 				cmdlist.append('echo "of the USB-ports, therefor an extra copy of the "')
@@ -399,12 +398,13 @@ class ImageBackup(Screen):
 		END = time()
 		DIFF = int(END - self.START)
 		TIMELAP = str(datetime.timedelta(seconds=DIFF))
-		cmdlist.append('echo " Time required for this process: %s"' %TIMELAP)
+		cmdlist.append('echo "Time required for this process: %s"' %TIMELAP)
+		cmdlist.append('echo "_________________________________________________________\n"')
 
 		self.session.open(Console, title = self.TITLE, cmdlist = cmdlist, closeOnSuccess = False)
 
 	def imageInfo(self):
-		AboutText = _("Full Image Backupscript by openATV ")
+		AboutText = _("openHDF Full-Image Backupscript")
 		AboutText += _("Support at") + " www.hdfreaks.cc\n\n"
 		AboutText += _("[Image Info]\n")
 		AboutText += _("Model: %s %s\n") % (getMachineBrand(), getMachineName())

@@ -7,6 +7,7 @@ from Components.ActionMap import NumberActionMap
 from Components.ConfigList import ConfigListScreen
 from Components.config import config, ConfigSubsection, getConfigListEntry, ConfigNothing, ConfigSelection, ConfigOnOff
 from Components.Label import Label
+from Components.Pixmap import Pixmap
 from Components.Sources.StaticText import StaticText
 from Components.Sources.List import List
 from Components.Sources.Boolean import Boolean
@@ -27,6 +28,9 @@ class AudioSelection(Screen, ConfigListScreen):
 		self["key_green"] = Boolean(False)
 		self["key_yellow"] = Boolean(True)
 		self["key_blue"] = Boolean(False)
+		self["key_left"] = Pixmap()
+		self["key_right"] = Pixmap()
+		self["switchdescription"] = Label(_("Switch between Audio-, Subtitlepage"))
 		self["summary_description"] = StaticText("")
 
 		ConfigListScreen.__init__(self, [])
@@ -305,16 +309,14 @@ class AudioSelection(Screen, ConfigListScreen):
 		config.av.bypass_edid_checking.save()
 
 	def changeAC3Downmix(self, downmix):
-		if downmix.value:
-			config.av.downmix_ac3.setValue(True)
-			if SystemInfo["supportPcmMultichannel"]:
-				config.av.pcm_multichannel.setValue(False)
-		else:
-			config.av.downmix_ac3.setValue(False)
+		config.av.downmix_ac3.value = downmix.getValue() == True
 		config.av.downmix_ac3.save()
-		if SystemInfo["supportPcmMultichannel"]:
-			config.av.pcm_multichannel.save()
-		self.fillList()
+		if SystemInfo["CanDownmixDTS"]:
+			config.av.downmix_dts.value = config.av.downmix_ac3.value
+			config.av.downmix_dts.save()
+		if SystemInfo["CanDownmixAAC"]:
+			config.av.downmix_aac.value = config.av.downmix_ac3.value
+			config.av.downmix_aac.save()
 
 	def changePCMMultichannel(self, multichan):
 		if multichan.value:
@@ -349,7 +351,7 @@ class AudioSelection(Screen, ConfigListScreen):
 		if self.focus == FOCUS_CONFIG:
 			ConfigListScreen.keyLeft(self)
 		elif self.focus == FOCUS_STREAMS:
-			self["streams"].setIndex(0)
+			self.keyAudioSubtitle()
 
 	def keyRight(self, config = False):
 		if config or self.focus == FOCUS_CONFIG:
@@ -360,8 +362,8 @@ class AudioSelection(Screen, ConfigListScreen):
 			else:
 				ConfigListScreen.keyRight(self)
 
-		if self.focus == FOCUS_STREAMS and self["streams"].count() and config == False:
-			self["streams"].setIndex(self["streams"].count()-1)
+		if self.focus == FOCUS_STREAMS and config == False:
+			self.keyAudioSubtitle()
 
 	def keyRed(self):
 		if self["key_red"].getBoolean():
@@ -402,6 +404,9 @@ class AudioSelection(Screen, ConfigListScreen):
 			self["config"].instance.moveSelection(self["config"].instance.moveUp)
 		elif self.focus == FOCUS_STREAMS:
 			if self["streams"].getIndex() == 0:
+				self["switchdescription"].hide()
+				self["key_left"].hide()
+				self["key_right"].hide()
 				self["config"].instance.setSelectionEnable(True)
 				self["streams"].style = "notselected"
 				self["config"].setCurrentIndex(len(self["config"].getList())-1)
@@ -414,6 +419,9 @@ class AudioSelection(Screen, ConfigListScreen):
 			if self["config"].getCurrentIndex() < len(self["config"].getList())-1:
 				self["config"].instance.moveSelection(self["config"].instance.moveDown)
 			else:
+				self["switchdescription"].show()
+				self["key_left"].show()
+				self["key_right"].show()
 				self["config"].instance.setSelectionEnable(False)
 				self["streams"].style = "default"
 				self.focus = FOCUS_STREAMS

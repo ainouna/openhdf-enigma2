@@ -17,22 +17,20 @@ import urllib2
 import os
 import shutil
 import math
-from boxbranding import getBoxType,  getImageDistro, getMachineName, getMachineBrand, getBrandOEM
-
-distro =  getImageDistro()
+from boxbranding import getBoxType, getMachineName, getMachineBrand
 
 #############################################################################################################
-image = 0 # 0=openATV / 1=openMips 2=openhdf
-if distro.lower() == "openmips":
-	image = 1
-elif distro.lower() == "openatv":
-	image = 0
-elif distro.lower() == "openhdf":
-	image = 2
-feedurl_atv = 'http://images.mynonpublic.com/openatv/nightly'
-feedurl_om = 'http://image.openmips.com/2.0'
-feedurl_hdf = 'http://v4.hdfreaks.cc'
-feedurl_team = 'http://v4.hdfreaks.cc/team'
+# Create a List of imagetypes
+# 0 = Name Of Image, 1 = link to file
+images = []
+global imagesCounter
+imagesCounter = 0
+images.append(["Team", "http://teamimages.hdfreaks.cc"])
+images.append(["V5.1", "http://v51.hdfreaks.cc"])
+images.append(["V5.2", "http://v52.hdfreaks.cc"])
+images.append(["V4.2", "http://v42.hdfreaks.cc"])
+images.append(["V4.1", "http://v41.hdfreaks.cc"])
+
 imagePath = '/media/hdd/images'
 flashPath = '/media/hdd/images/flash'
 flashTmp = '/media/hdd/images/tmp'
@@ -56,7 +54,7 @@ class FlashOnline(Screen):
 		<widget name="key_green" position="140,360" zPosition="2" size="140,40" valign="center" halign="center" font="Regular;21" transparent="1" shadowColor="black" shadowOffset="-1,-1" />
 		<widget name="key_yellow" position="280,360" zPosition="2" size="140,40" valign="center" halign="center" font="Regular;21" transparent="1" shadowColor="black" shadowOffset="-1,-1" />
 		<widget name="key_blue" position="420,360" zPosition="2" size="140,40" valign="center" halign="center" font="Regular;21" transparent="1" shadowColor="black" shadowOffset="-1,-1" />
-		<widget name="info-online" position="10,30" zPosition="1" size="450,100" font="Regular;20" halign="left" valign="top" transparent="1" />
+		<widget name="info-online" position="10,80" zPosition="1" size="450,100" font="Regular;20" halign="left" valign="top" transparent="1" />
 		<widget name="info-local" position="10,150" zPosition="1" size="450,200" font="Regular;20" halign="left" valign="top" transparent="1" />
 	</screen>"""
 
@@ -150,16 +148,13 @@ class doFlashImage(Screen):
 		self["key_red"] = Button(_("Exit"))
 		self["key_blue"] = Button("")
 		self["key_yellow"] = Button("")
+		self.imagesCounter = imagesCounter
 		self.filename = None
 		self.imagelist = []
 		self.simulate = False
 		self.Online = online
 		self.imagePath = imagePath
-		self.feedurl = feedurl_hdf
-		if image == 0:
-			self.feed = "atv"
-		else:
-			self.feed = "hdf"
+		self.feedurl = images[self.imagesCounter][1]
 		self["imageList"] = MenuList(self.imagelist)
 		self["actions"] = ActionMap(["OkCancelActions", "ColorActions"],
 		{
@@ -178,12 +173,13 @@ class doFlashImage(Screen):
 
 	def blue(self):
 		if self.Online:
-			if image == 2:
-				if self.feed == "team":
-					self.feed = "hdf"
-				else:
-					self.feed = "team"
-				self.layoutFinished()
+
+			if self.imagesCounter <= len(images) - 2:
+				self.imagesCounter = self.imagesCounter + 1
+			else:
+				self.imagesCounter = 0
+			self.feed = images[self.imagesCounter][0]
+			self.layoutFinished()
 			return
 		sel = self["imageList"].l.getCurrentSelection()
 		if sel == None:
@@ -220,7 +216,7 @@ class doFlashImage(Screen):
 			box = "sf8"
 		elif box.startswith('et') and not box in ('et8000', 'et8500', 'et10000'):
 			box = box[0:3] + 'x00'
-		elif box == "odinm9" and self.feed == "hdf":
+		elif box == "odinm9":
 			box = 'maram9'
 		return box
 
@@ -234,11 +230,11 @@ class doFlashImage(Screen):
 		box = self.box()
 		self.hide()
 		if self.Online:
-			if self.feed == "team":
+			if self.imagesCounter == 0:
 				url = self.feedurl + "/" + sel
 			else:
 				url = self.feedurl + "/" + box + "/" + sel
-			#print url
+			#print "URL:", url
 			u = urllib2.urlopen(url)
 			f = open(file_name, 'wb')
 			meta = u.info()
@@ -274,8 +270,13 @@ class doFlashImage(Screen):
 			self.show()
 
 	def unzip_image(self, filename, path):
-		print "Unzip %s to %s" %(filename,path)
-		self.session.openWithCallback(self.cmdFinished, Console, title = _("Unzipping files, Please wait ..."), cmdlist = ['unzip ' + filename + ' -o -d ' + path, "sleep 3"], closeOnSuccess = True)
+		if getBoxType() in "dm7080" "dm820":
+			print "Untaring %s to %s" %(filename,path)
+			os.system('mkdir /dbackup.new')
+			self.session.openWithCallback(self.cmdFinished, Console, title = _("Untaring files, Please wait ..."), cmdlist = ['tar -xJf ' + filename + ' -C ' + '/dbackup.new', "sleep 3"], closeOnSuccess = True)
+		else:
+			print "Unzip %s to %s" %(filename,path)
+			self.session.openWithCallback(self.cmdFinished, Console, title = _("Unzipping files, Please wait ..."), cmdlist = ['unzip ' + filename + ' -o -d ' + path, "sleep 3"], closeOnSuccess = True)
 
 	def cmdFinished(self):
 		self.prepair_flashtmp(flashPath)
@@ -283,27 +284,30 @@ class doFlashImage(Screen):
 
 	def Start_Flashing(self):
 		print "Start Flashing"
-		if os.path.exists(ofgwritePath):
-			text = _("Flashing: ")
-			if self.simulate:
-				text += _("Simulate (no write)")
-				cmd = "%s -n -r -k %s > /dev/null 2>&1" % (ofgwritePath, flashTmp)
-				self.close()
-				message = "echo -e '\n"
-				message += _('Show only found image and mtd partitions.\n')
-				message += "'"
-			else:
-				text += _("root and kernel")
-				cmd = "%s -r -k %s > /dev/null 2>&1" % (ofgwritePath, flashTmp)
-				message = "echo -e '\n"
-				message += _('ofgwrite will stop enigma2 now to run the flash.\n')
-				message += _('Your %s %s will freeze during the flashing process.\n') % (getMachineBrand(), getMachineName())
-				message += _('Please: DO NOT reboot your %s %s and turn off the power.\n') % (getMachineBrand(), getMachineName())
-				message += _('The image or kernel will be flashing and auto booted in few minutes.\n')
-				if self.box() == 'gb800solo':
-					message += _('GB800SOLO takes about 20 mins !!\n')
-				message += "'"
-			self.session.open(Console, text,[message, cmd])
+		if getBoxType() in "dm7080" "dm820":
+			os.system('/usr/lib/enigma2/python/Plugins/Extensions/dBackup/bin/swaproot 0')
+		else:
+			if os.path.exists(ofgwritePath):
+				text = _("Flashing: ")
+				if self.simulate:
+					text += _("Simulate (no write)")
+					cmd = "%s -n -r -k %s > /dev/null 2>&1" % (ofgwritePath, flashTmp)
+					self.close()
+					message = "echo -e '\n"
+					message += _('Show only found image and mtd partitions.\n')
+					message += "'"
+				else:
+					text += _("root and kernel")
+					cmd = "%s -r -k %s > /dev/null 2>&1" % (ofgwritePath, flashTmp)
+					message = "echo -e '\n"
+					message += _('ofgwrite will stop enigma2 now to run the flash.\n')
+					message += _('Your %s %s will freeze during the flashing process.\n') % (getMachineBrand(), getMachineName())
+					message += _('Please: DO NOT reboot your %s %s and turn off the power.\n') % (getMachineBrand(), getMachineName())
+					message += _('The image or kernel will be flashing and auto booted in few minutes.\n')
+					if self.box() == 'gb800solo':
+						message += _('GB800SOLO takes about 20 mins !!\n')
+					message += "'"
+				self.session.open(Console, text,[message, cmd])
 
 	def prepair_flashtmp(self, tmpPath):
 		if os.path.exists(flashTmp):
@@ -314,7 +318,7 @@ class doFlashImage(Screen):
 			os.mkdir(flashTmp)
 		kernel = True
 		rootfs = True
-		
+
 		for path, subdirs, files in os.walk(tmpPath):
 			for name in files:
 				if name.find('kernel') > -1 and name.endswith('.bin') and kernel:
@@ -362,7 +366,7 @@ class doFlashImage(Screen):
 				self.unzip_image(strPath + '/' + filename, flashPath)
 			else:
 				self.layoutFinished()
-	
+
 		else:
 			self.imagePath = imagePath
 
@@ -371,17 +375,9 @@ class doFlashImage(Screen):
 		self.imagelist = []
 		if self.Online:
 			self["key_yellow"].setText("")
-			if image == 2:
-				if self.feed == "hdf":
-					self.feedurl = feedurl_hdf
-					self["key_blue"].setText("Teamimages")
-				else:
-					self.feedurl = feedurl_team
-					self["key_blue"].setText("Nightly V4.2")
-			else:
-				self.feedurl = feedurl_atv
-				self["key_blue"].setText("")
-			if self.feedurl == feedurl_team:
+			self.feedurl = images[self.imagesCounter][1]
+			self["key_blue"].setText(images[self.imagesCounter][0])
+			if self.imagesCounter == 0:
 				url = '%s' % (self.feedurl)
 			else:
 				url = '%s/%s' % (self.feedurl,box)
@@ -402,29 +398,22 @@ class doFlashImage(Screen):
 			lines = the_page.split('\n')
 			tt = len(box)
 			for line in lines:
-				if line.find("<a href='%s/" % box) > -1:
-					t = line.find("<a href='%s/" % box)
-					if self.feed == "atv":
-						self.imagelist.append(line[t+tt+10:t+tt+tt+39])
-					else:
-						self.imagelist.append(line[t+tt+10:t+tt+tt+40])
-				if self.feedurl == feedurl_team:
-					if line.find('%s' % box) > -1:
-						t = line.find('<a href="')
+				if line.find(box + "-") > -1:
+					t = line.find('<a href="')
+					if line.find('zip"') > -1:
 						e = line.find('zip"')
 						self.imagelist.append(line[t+9:e+3])
-				else:
-					if line.find('<a href="o') > -1:
-						t = line.find('<a href="o')
-						e = line.find('zip"')
-						self.imagelist.append(line[t+9:e+3])
-
+					if line.find('.xz"') > -1:
+						e = line.find('xz"')
+						self.imagelist.append(line[t+9:e+2])
 		else:
 			self["key_blue"].setText(_("Delete"))
 			self["key_yellow"].setText(_("Devices"))
 			for name in os.listdir(self.imagePath):
-				if name.endswith(".zip"): # and name.find(box) > 1:
+				if name.endswith(".zip") or name.endswith(".xz"): # and name.find(box) > 1:
 					self.imagelist.append(name)
+#				if name.find(box):
+#					self.imagelist.append(name)
 			self.imagelist.sort()
 			if os.path.exists(flashTmp):
 				for file in os.listdir(flashTmp):

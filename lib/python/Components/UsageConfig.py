@@ -13,13 +13,11 @@ from Tools.HardwareInfo import HardwareInfo
 
 def InitUsageConfig():
 	config.misc.useNTPminutes = ConfigSelection(default = "30", choices = [("30", "30" + " " +_("minutes")), ("60", _("Hour")), ("1440", _("Once per day"))])
-	if getBrandOEM() in ('vuplus', 'ini'):
-		config.misc.remotecontrol_text_support = ConfigYesNo(default = True)
-	else:
-		config.misc.remotecontrol_text_support = ConfigYesNo(default = False)
+	config.misc.remotecontrol_text_support = ConfigYesNo(default = True)
 
 	config.workaround = ConfigSubsection()
 	config.workaround.deeprecord = ConfigYesNo(default = False)
+	config.workaround.wakeuptimeoffset = ConfigSelection(default = "standard", choices = [("-300", _("-5")), ("-240", _("-4")), ("-180", _("-3")), ("-120", _("-2")), ("-60", _("-1")), ("standard", _("Standard")), ("0", _("0")), ("60", _("1")), ("120", _("2")), ("180", _("3")), ("240", _("4")), ("300", _("5"))])
 
 	config.usage = ConfigSubsection()
 	config.usage.shutdownOK = ConfigBoolean(default = True)
@@ -112,8 +110,13 @@ def InitUsageConfig():
 	config.usage.pip_zero_button = ConfigSelection(default = "swapstop", choices = [
 		("standard", _("Standard")), ("swap", _("Swap PiP and main picture")),
 		("swapstop", _("Move PiP to main picture")), ("stop", _("Stop PiP")) ])
-	config.usage.pip_hideOnExit = ConfigSelection(default = "without popup", choices = [
-		("no", _("No")), ("popup", _("With popup")), ("without popup", _("Without popup")) ])
+	config.usage.pip_hideOnExit = ConfigSelection(default = "no", choices = [
+		("no", _("no")), ("popup", _("With popup")), ("without popup", _("Without popup")) ])
+	choicelist = [("-1", _("Disabled")), ("0", _("No timeout"))]
+	for i in [60, 300, 600, 900, 1800, 2700, 3600]:
+		m = i/60
+		choicelist.append(("%d" % i, ngettext("%d minute", "%d minutes", m) % m))
+	config.usage.pip_last_service_timeout = ConfigSelection(default = "0", choices = choicelist)
 
 	if not os.path.exists(resolveFilename(SCOPE_HDD)):
 		try:
@@ -198,6 +201,8 @@ def InitUsageConfig():
 		("intermediate", _("Intermediate")),
 		("expert", _("Expert")) ])
 
+	config.usage.window_timeout = ConfigSelectionNumber(default = 180, stepwidth = 1, min = 1, max = 600, wraparound = True)
+
 	config.usage.on_long_powerpress = ConfigSelection(default = "show_menu", choices = [
 		("show_menu", _("Show shutdown menu")),
 		("shutdown", _("Immediate shutdown")),
@@ -226,7 +231,11 @@ def InitUsageConfig():
 		("2", "DVB-C/-S/-T"),
 		("3", "DVB-C/-T/-S"),
 		("4", "DVB-T/-C/-S"),
-		("5", "DVB-T/-S/-C") ])
+		("5", "DVB-T/-S/-C"),
+		("127", "No priority") ])
+
+	config.usage.remote_fallback_enabled = ConfigYesNo(default = False);
+	config.usage.remote_fallback = ConfigText(default = "", fixed_size = False);
 
 	nims = [("-1", _("auto"))]
 	rec_nims = [("-2", _("Disabled")), ("-1", _("auto"))]
@@ -286,7 +295,7 @@ def InitUsageConfig():
 
 	config.usage.blinking_display_clock_during_recording = ConfigYesNo(default = False)
 
-	config.usage.blinking_rec_symbol_during_recording = ConfigYesNo(default = False)
+	config.usage.blinking_rec_symbol_during_recording = ConfigYesNo(default = True)
 
 	config.usage.show_message_when_recording_starts = ConfigYesNo(default = True)
 
@@ -299,7 +308,8 @@ def InitUsageConfig():
 	])
 	config.usage.movielist_unseen = ConfigYesNo(default = True)
 
-	config.usage.swap_snr_on_osd = ConfigYesNo(default = False)
+	#config.usage.swap_snr_on_osd = ConfigYesNo(default = False)
+	config.usage.swap_snr_on_osd = ConfigSelection(default = "", choices = [("", _("Percent")), ("true", _("Decibel"))])
 	config.usage.swap_time_display_on_osd = ConfigSelection(default = "0", choices = [("0", _("Skin Setting")), ("1", _("Mins")), ("2", _("Mins Secs")), ("3", _("Hours Mins")), ("4", _("Hours Mins Secs")), ("5", _("Percentage"))])
 	config.usage.swap_media_time_display_on_osd = ConfigSelection(default = "0", choices = [("0", _("Skin Setting")), ("1", _("Mins")), ("2", _("Mins Secs")), ("3", _("Hours Mins")), ("4", _("Hours Mins Secs")), ("5", _("Percentage"))])
 	config.usage.swap_time_remaining_on_osd = ConfigSelection(default = "0", choices = [("0", _("Remaining")), ("1", _("Elapsed")), ("2", _("Elapsed & Remaining")), ("3", _("Remaining & Elapsed"))])
@@ -435,6 +445,8 @@ def InitUsageConfig():
 		for hdd in harddiskmanager.HDDList():
 			hdd[1].setIdleTime(int(configElement.value))
 	config.usage.hdd_standby.addNotifier(setHDDStandby, immediate_feedback=False)
+	config.usage.hdd_standby_in_standby = ConfigSelection(default = "-1", choices = [("-1", _("Same as in active")), ("0", _("No standby"))] + choicelist)
+	config.usage.hdd_timer = ConfigYesNo(default = False)
 
 	if SystemInfo["12V_Output"]:
 		def set12VOutput(configElement):
@@ -459,7 +471,10 @@ def InitUsageConfig():
 	config.network = ConfigSubsection()
 	if SystemInfo["WakeOnLAN"]:
 		def wakeOnLANChanged(configElement):
-			open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "enable" or "disable")
+			if getBoxType() in ('et10000', 'gbquadplus', 'gbquad', 'gb800ueplus', 'gb800seplus', 'gbultraue', 'gbultrase', 'gbipbox', 'quadbox2400', 'mutant2400', 'et7x00', 'et7000', 'et7500', 'et8500'):
+				open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "on" or "off")
+			else:
+				open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "enable" or "disable")
 		config.network.wol = ConfigYesNo(default = False)
 		config.network.wol.addNotifier(wakeOnLANChanged)
 	config.network.AFP_autostart = ConfigYesNo(default = False)
@@ -496,8 +511,9 @@ def InitUsageConfig():
 	config.timeshift.timeshiftMaxHours = ConfigSelectionNumber(min = 1, max = 999, stepwidth = 1, default = 12, wraparound = True)
 	config.timeshift.timeshiftMaxEvents = ConfigSelectionNumber(min = 1, max = 999, stepwidth = 1, default = 12, wraparound = True)
 	config.timeshift.timeshiftCheckEvents = ConfigSelection(default = "0", choices = [("0", _("Disabled")), "15", "30", "60", "120", "240", "480"])
-	config.timeshift.timeshiftCheckFreeSpace = ConfigYesNo(default = False)
+	config.timeshift.timeshiftCheckFreeSpace = ConfigSelection(default = "0", choices = [("0", _("No")), ("1024", _("1 GB")),("2048", _("2 GB")),("4096", _("4 GB")),("8192", _("8 GB")),])
 	config.timeshift.deleteAfterZap = ConfigYesNo(default = True)
+	config.timeshift.filesplitting = ConfigYesNo(default = True)
 
 	config.seek = ConfigSubsection()
 	config.seek.baractivation = ConfigSelection([("leftright", _("Long Left/Right")),("ffrw", _("Long << / >>"))], "leftright")
@@ -518,6 +534,12 @@ def InitUsageConfig():
 		("step", _("Single step (GOP)")),
 		("last", _("Last speed")) ])
 
+	config.seek.withjumps = ConfigYesNo(default = True)
+	config.seek.withjumps_after_ff_speed = ConfigSelection([("1", _("never")), ("2", _("2x")), ("4", _("2x, 4x")), ("6", _("2x, 4x, 6x")), ("8", _("2x, 4x, 6x, 8x"))], default="4")
+	config.seek.withjumps_forwards_ms  = ConfigSelection([("200", _("0.2s")), ("300", _("0.3s")), ("400", _("0.4s")), ("500", _("0.5s")), ("600", _("0.6s")), ("700", _("0.7s")), ("800", _("0.8s")), ("900", _("0.9s")), ("1000", _("1s")), ("1200", _("1.2s")), ("1500", _("1.5s")), ("1700", _("1.7s")), ("2000", _("2s")), ("2500", _("2.5s")), ("3000", _("3s")), ("3500", _("3.5s")), ("4000", _("4s")), ("5000", _("5s"))], default="700")
+	config.seek.withjumps_backwards_ms = ConfigSelection([("200", _("0.2s")), ("300", _("0.3s")), ("400", _("0.4s")), ("500", _("0.5s")), ("600", _("0.6s")), ("700", _("0.7s")), ("800", _("0.8s")), ("900", _("0.9s")), ("1000", _("1s")), ("1200", _("1.2s")), ("1500", _("1.5s")), ("1700", _("1.7s")), ("2000", _("2s")), ("2500", _("2.5s")), ("3000", _("3s")), ("3500", _("3.5s")), ("4000", _("4s")), ("5000", _("5s"))], default="700")
+	config.seek.withjumps_repeat_ms    = ConfigSelection([("200", _("0.2s")), ("300", _("0.3s")), ("400", _("0.4s")), ("500", _("0.5s")), ("600", _("0.6s")), ("700", _("0.7s")), ("800", _("0.8s")), ("900", _("0.9s")), ("1000", _("1s"))], default="200")
+	config.seek.withjumps_avoid_zero   = ConfigYesNo(default = True)
 
 	config.crash = ConfigSubsection()
 	config.crash.details = ConfigYesNo(default = True)
@@ -586,7 +608,7 @@ def InitUsageConfig():
 		zapoptions = [("mute", _("Black screen")), ("hold", _("Hold screen")), ("mutetilllock", _("Black screen till locked")), ("holdtilllock", _("Hold till locked"))]
 		config.misc.zapmode = ConfigSelection(default = "mute", choices = zapoptions )
 		config.misc.zapmode.addNotifier(setZapmode, immediate_feedback = False)
-	config.usage.historymode = ConfigSelection(default = "1", choices = [("1", _("Show menu")), ("0", _("Just zap")), ("2", _("Show Zap-History Browser")), ("3", _("Volume Adjust"))])
+	config.usage.historymode = ConfigSelection(default = "0", choices = [("1", _("Show menu")), ("0", _("Just zap")), ("2", _("Show Zap-History Browser")), ("3", _("Volume Adjust"))])
 	config.usage.bookmarkmode = ConfigSelection(default = "0", choices = [("1", _("Show EMC")), ("0", _("Show Movielist")), ("2", _("Show Simple Movie List"))])
 
 	config.subtitles = ConfigSubsection()

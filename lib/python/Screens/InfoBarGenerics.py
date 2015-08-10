@@ -47,7 +47,7 @@ from Screens.TimerEntry import TimerEntry as TimerEntry
 from Tools import Directories, Notifications
 from Tools.Directories import pathExists, fileExists, getRecordingFilename, copyfile, moveFiles, resolveFilename, SCOPE_TIMESHIFT, SCOPE_CURRENT_SKIN
 from Tools.KeyBindings import getKeyDescription
-from enigma import eTimer, eServiceCenter, eDVBServicePMTHandler, iServiceInformation, iPlayableService, eServiceReference, eEPGCache, eActionMap
+from enigma import eTimer, eServiceCenter, eDVBServicePMTHandler, iServiceInformation, iPlayableService, eServiceReference, eEPGCache, eActionMap, eDVBVolumecontrol, getDesktop
 from boxbranding import getBoxType, getMachineBrand, getMachineName, getBrandOEM, getDriverDate, getImageVersion, getImageBuild, getMachineProcModel, getMachineBuild
 
 from time import time, localtime, strftime
@@ -79,31 +79,11 @@ class bcolors:
         self.FAIL = ''
         self.ENDC = ''
 
-print bcolors.OKGREEN + "~~~~ read box informations ~~~~~~~~~" + bcolors.ENDC
-print bcolors.OKBLUE + "MachineName =", getMachineName() + bcolors.ENDC
-print bcolors.OKBLUE + "MachineBrand =", getMachineBrand() + bcolors.ENDC
-print bcolors.OKBLUE + "BoxType =", getBoxType() + bcolors.ENDC
-print bcolors.OKBLUE + "OEM =", getBrandOEM() + bcolors.ENDC
-print bcolors.OKBLUE + "Driverdate =", getDriverDate() + bcolors.ENDC
-print bcolors.OKBLUE + "Imageversion =", getImageVersion() + bcolors.ENDC
-print bcolors.OKBLUE + "Imagebuild =", getImageBuild() + bcolors.ENDC
-print bcolors.OKGREEN + "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" + bcolors.ENDC
-
-try:
-	os.system("echo ~~~ Box Info ~~~~~~~~~~~~~~~~~~~~"" > /etc/enigma2/boxinformations")
-	os.system("echo getMachineName = " + getMachineName() + " >> /etc/enigma2/boxinformations")
-	os.system("echo getMachineBrand = " + getMachineBrand() + " >> /etc/enigma2/boxinformations")
-	os.system("echo getBoxType = " + getBoxType() + " >> /etc/enigma2/boxinformations")
-	os.system("echo getBrandOEM = " + getBrandOEM() + " >> /etc/enigma2/boxinformations")
-	os.system("echo getDriverDate = " + getDriverDate() + " >> /etc/enigma2/boxinformations")
-	os.system("echo getImageVersion = " + getImageVersion() + " >> /etc/enigma2/boxinformations")
-	os.system("echo getImageBuild = " + getImageBuild() + " >> /etc/enigma2/boxinformations")
-	os.system("echo ~~~ CPU Info ~~~~~~~~~~~~~~~~~~~~"" >> /etc/enigma2/boxinformations")
-	os.system("cat /proc/cpuinfo >> /etc/enigma2/boxinformations")
-except:
-    pass
-
 AUDIO = False
+seek_withjumps_muted = False
+jump_pts_adder = 0
+jump_last_pts = None
+jump_last_pos = None
 
 if fileExists("/usr/lib/enigma2/python/Plugins/Extensions/CoolTVGuide/plugin.pyo"):
 	COOLTVGUIDE = True
@@ -630,6 +610,7 @@ class InfoBarShowHide(InfoBarScreenSaver):
 
 		self.standardInfoBar = False
 		self.lastSecondInfoBar = 0
+		self.lastResetAlpha = True
 		self.secondInfoBarScreen = ""
 		if isStandardInfoBar(self):
 			self.secondInfoBarScreen = self.session.instantiateDialog(SecondInfoBar)
@@ -685,6 +666,10 @@ class InfoBarShowHide(InfoBarScreenSaver):
 			f=open("/proc/stb/video/alpha","w")
 			f.write("%i" % (value))
 			f.close()
+			if value == config.av.osd_alpha.value:
+				self.lastResetAlpha = True
+			else:
+				self.lastResetAlpha = False
 
 	def __onHide(self):
 		self.__state = self.STATE_HIDDEN
@@ -693,10 +678,11 @@ class InfoBarShowHide(InfoBarScreenSaver):
 			x(False)
 
 	def resetAlpha(self):
-		if config.usage.show_infobar_do_dimming.value:
+		if config.usage.show_infobar_do_dimming.value and self.lastResetAlpha is False:
 			self.unDimmingTimer = eTimer()
 			self.unDimmingTimer.callback.append(self.unDimming)
 			self.unDimmingTimer.start(300, True)
+			self.unDimming()
 
 	def keyHide(self):
 		if self.__state == self.STATE_HIDDEN:
@@ -937,6 +923,8 @@ class InfoBarShowHide(InfoBarScreenSaver):
 			self.hideTimer.stop()
 
 	def unlockShow(self):
+		if config.usage.show_infobar_do_dimming.value and self.lastResetAlpha is False:
+			self.doWriteAlpha(config.av.osd_alpha.value)
 		try:
 			self.__locked -= 1
 		except:
@@ -1331,27 +1319,39 @@ class InfoBarChannelSelection:
 		if config.usage.show_servicelist.value:
 			self.session.execDialog(self.servicelist)
 
+	def historyZapForward(self):
+		self.servicelist.historyZap(+1)
+
+	def historyZapBackward(self):
+		self.servicelist.historyZap(-1)
+		
 	def historyBack(self):
 		if config.usage.historymode.value == "0":
 			self.servicelist.historyBack()
+		if config.usage.historymode.value == "1":
+			self.servicelist.historyZap(-1)
 		if config.usage.historymode.value == "3":
 			self.volumeDown()
 		elif config.usage.historymode.value == "2":
 			if fileExists("/usr/lib/enigma2/python/Plugins/Extensions/ZapHistoryBrowser/plugin.pyo"):
-					self.showZapHistoryBrowser()
+				self.showZapHistoryBrowser()
 		else:
-			self.servicelist.historyZap(-1)
+			return 1
+			#self.servicelist.historyZap(-1)
 
 	def historyNext(self):
 		if config.usage.historymode.value == "0":
 			self.servicelist.historyNext()
+		if config.usage.historymode.value == "1":
+			self.servicelist.historyZap(+1)
 		if config.usage.historymode.value == "3":
 			self.volumeUp()
 		elif config.usage.historymode.value == "2":
 			if fileExists("/usr/lib/enigma2/python/Plugins/Extensions/ZapHistoryBrowser/plugin.pyo"):
-					self.showZapHistoryBrowser()
+				self.showZapHistoryBrowser()
 		else:
-			self.servicelist.historyZap(+1)
+			return 1
+			#self.servicelist.historyZap(+1)
 
 	def useBookmark(self):
 		if config.usage.bookmarkmode.value == "1":
@@ -1412,7 +1412,7 @@ class InfoBarChannelSelection:
 		self.servicelist.showSatellites()
 		self.session.execDialog(self.servicelist)
 
-	def zapUp(self):
+	def zapDown(self):
 		if not self.LongButtonPressed or SystemInfo.get("NumVideoDecoders", 1) <= 1:
 			if self.pts_blockZap_timer.isActive():
 				return
@@ -1439,9 +1439,8 @@ class InfoBarChannelSelection:
 			self.servicelist.zap(enable_pipzap = True)
 
 		elif self.LongButtonPressed:
-			if not hasattr(self.session, 'pip') and not self.session.pipshown:
-				self.session.open(MessageBox, _("Please open Picture in Picture first"), MessageBox.TYPE_ERROR)
-				return
+			#if not hasattr(self.session, 'pip') and not self.session.pipshown:
+			return
 
 			from Screens.ChannelSelection import ChannelSelection
 			ChannelSelectionInstance = ChannelSelection.instance
@@ -1468,7 +1467,7 @@ class InfoBarChannelSelection:
 			self.servicelist2.zap(enable_pipzap = True)
 			ChannelSelectionInstance.dopipzap = False
 
-	def zapDown(self):
+	def zapUp(self):
 		if not self.LongButtonPressed or SystemInfo.get("NumVideoDecoders", 1) <= 1:
 			if self.pts_blockZap_timer.isActive():
 				return
@@ -1494,9 +1493,8 @@ class InfoBarChannelSelection:
 				self.servicelist.moveDown()
 			self.servicelist.zap(enable_pipzap = True)
 		elif self.LongButtonPressed:
-			if not hasattr(self.session, 'pip') and not self.session.pipshown:
-				self.session.open(MessageBox, _("Please open Picture in Picture first"), MessageBox.TYPE_ERROR)
-				return
+			#if not hasattr(self.session, 'pip') and not self.session.pipshown:
+			return
 
 			from Screens.ChannelSelection import ChannelSelection
 			ChannelSelectionInstance = ChannelSelection.instance
@@ -3478,6 +3476,8 @@ class InfoBarSeek:
 		self.activityTimer.callback.append(self.doActivityTimer)
 		self.seekstate = self.SEEK_STATE_PLAY
 		self.lastseekstate = self.SEEK_STATE_PLAY
+		self.seekAction = 0
+		self.LastseekAction = False
 
 		self.onPlayStateChanged = [ ]
 
@@ -3561,9 +3561,16 @@ class InfoBarSeek:
 			self.setSeekState(self.SEEK_STATE_PLAY)
 		else:
 			self["SeekActions"].setEnabled(True)
-			self.activityTimer.start(200, False)
+			self.activityTimer.start(int(config.seek.withjumps_repeat_ms.getValue()), False)
+			#self.activityTimer.start(200, False)
 			for c in self.onPlayStateChanged:
 				c(self.seekstate)
+
+		global seek_withjumps_muted
+		if seek_withjumps_muted and eDVBVolumecontrol.getInstance().isMuted():
+			print "STILL MUTED AFTER FFWD/FBACK !!!!!!!! so we unMute"
+			seek_withjumps_muted = False
+			eDVBVolumecontrol.getInstance().volumeUnMute()
 
 	def doActivityTimer(self):
 		if self.isSeekable():
@@ -3586,6 +3593,8 @@ class InfoBarSeek:
 			self.activityTimer.stop()
 			self.activity = 0
 			hdd = 0
+			self.seekAction = 0
+
 		if os.path.exists("/proc/stb/lcd/symbol_hdd"):
 			file = open("/proc/stb/lcd/symbol_hdd", "w")
 			file.write('%d' % int(hdd))
@@ -3594,6 +3603,27 @@ class InfoBarSeek:
 			file = open("/proc/stb/lcd/symbol_hddprogress", "w")
 			file.write('%d' % int(self.activity))
 			file.close()
+		if self.LastseekAction:
+			self.DoSeekAction()
+
+	def DoSeekAction(self):
+		if self.seekAction > int(config.seek.withjumps_after_ff_speed.getValue()):
+			self.doSeekRelativeAvoidStall(self.seekAction * long(config.seek.withjumps_forwards_ms.getValue()) * 90)
+		elif self.seekAction < 0:
+			self.doSeekRelativeAvoidStall(self.seekAction * long(config.seek.withjumps_backwards_ms.getValue()) * 90)
+
+		for c in self.onPlayStateChanged:
+			if self.seekAction > int(config.seek.withjumps_after_ff_speed.getValue()): # Forward
+				c((0, self.seekAction, 0, ">> %dx" % self.seekAction))
+			elif self.seekAction < 0: # Backward
+				c((0, self.seekAction, 0, "<< %dx" % abs(self.seekAction)))
+
+		if self.seekAction == 0:
+			self.LastseekAction = False
+			self.doPause(False)
+			global seek_withjumps_muted
+			seek_withjumps_muted = False
+			self.setSeekState(self.SEEK_STATE_PLAY)
 
 	def __serviceStarted(self):
 		self.fast_winding_hint_message_showed = False
@@ -3613,37 +3643,29 @@ class InfoBarSeek:
 		pauseable = service.pause()
 
 		if pauseable is None:
-#			print "not pauseable."
 			state = self.SEEK_STATE_PLAY
 
 		self.seekstate = state
 
 		if pauseable is not None:
 			if self.seekstate[0] and self.seekstate[3] == '||':
-#				print "resolved to PAUSE"
 				self.activityTimer.stop()
 				pauseable.pause()
 			elif self.seekstate[0] and self.seekstate[3] == 'END':
-#				print "resolved to STOP"
 				self.activityTimer.stop()
-				service.stop()
 			elif self.seekstate[1]:
 				if not pauseable.setFastForward(self.seekstate[1]):
 					pass
-					# print "resolved to FAST FORWARD"
 				else:
 					self.seekstate = self.SEEK_STATE_PLAY
-					# print "FAST FORWARD not possible: resolved to PLAY"
 			elif self.seekstate[2]:
 				if not pauseable.setSlowMotion(self.seekstate[2]):
 					pass
-					# print "resolved to SLOW MOTION"
 				else:
 					self.seekstate = self.SEEK_STATE_PAUSE
-					# print "SLOW MOTION not possible: resolved to PAUSE"
 			else:
-#				print "resolved to PLAY"
-				self.activityTimer.start(200, False)
+				#self.activityTimer.start(500, False)
+				self.activityTimer.start(int(config.seek.withjumps_repeat_ms.getValue()), False)
 				pauseable.unpause()
 
 		for c in self.onPlayStateChanged:
@@ -3657,6 +3679,12 @@ class InfoBarSeek:
 		return True
 
 	def playpauseService(self):
+		if self.seekAction <> 0:
+			self.seekAction = 0
+			self.doPause(False)
+			global seek_withjumps_muted
+			seek_withjumps_muted = False
+			return
 		if self.seekstate == self.SEEK_STATE_PLAY:
 			self.pauseService()
 		else:
@@ -3692,6 +3720,35 @@ class InfoBarSeek:
 			return
 		seekable.seekTo(pts)
 
+	def doSeekRelativeAvoidStall(self, pts):
+		global jump_pts_adder
+		global jump_last_pts
+		global jump_last_pos
+		seekable = self.getSeek()
+		#when config.seek.withjumps, avoid that jumps smaller than the time between I-frames result in hanging, by increasing pts when stalled
+		if seekable and config.seek.withjumps_avoid_zero.getValue():
+			position = seekable.getPlayPosition()
+			if jump_last_pos and jump_last_pts:
+				if (abs(position[1] - jump_last_pos[1]) < 100*90) and (pts == jump_last_pts): # stalled?
+					jump_pts_adder += pts
+					jump_last_pts = pts
+					pts += jump_pts_adder
+				else:
+					jump_pts_adder = 0
+					jump_last_pts = pts
+			else:
+				jump_last_pts = pts
+			jump_last_pos = position
+		self.doSeekRelative(pts)
+
+	def doPause(self, pause):
+		if pause:
+			if not eDVBVolumecontrol.getInstance().isMuted():
+				eDVBVolumecontrol.getInstance().volumeMute()
+		else:
+			if eDVBVolumecontrol.getInstance().isMuted():
+				eDVBVolumecontrol.getInstance().volumeUnMute()
+
 	def doSeekRelative(self, pts):
 		seekable = self.getSeek()
 		if seekable is None:
@@ -3707,7 +3764,54 @@ class InfoBarSeek:
 		if abs(pts) > 100 and config.usage.show_infobar_on_skip.value:
 			self.showAfterSeek()
 
+	def isServiceTypeTS(self):
+		ref = self.session.nav.getCurrentlyPlayingServiceReference()
+		isTS = False
+		if ref is not None:
+			servincetype = ServiceReference(ref).getType()
+			if servincetype == 1:
+				isTS = True
+		return isTS
+
 	def seekFwd(self):
+		if config.seek.withjumps.value and not self.isServiceTypeTS():
+			self.seekFwd_new()
+		else:
+			self.seekFwd_old()
+
+	def seekBack(self):
+		if config.seek.withjumps.value and not self.isServiceTypeTS():
+			self.seekBack_new()
+		else:
+			self.seekBack_old()
+
+	def seekFwd_new(self):
+		self.LastseekAction = True
+		self.doPause(True)
+		global seek_withjumps_muted
+		seek_withjumps_muted = True
+		if self.seekAction >= 0:
+			self.seekAction = self.getHigher(abs(self.seekAction), config.seek.speeds_forward.value) or config.seek.speeds_forward.value[-1]
+		else:
+			self.seekAction = -self.getLower(abs(self.seekAction), config.seek.speeds_backward.value)
+		if self.seekAction == 2: # use fastforward for x2
+			self.setSeekState(self.makeStateForward(self.seekAction))
+		elif self.seekAction == 4: # we first need to go the play state, to stop fastforward
+			self.setSeekState(self.SEEK_STATE_PLAY)
+
+	def seekBack_new(self):
+		self.LastseekAction = True
+		self.doPause(True)
+		global seek_withjumps_muted
+		seek_withjumps_muted = True
+		if self.seekAction <= 0:
+			self.seekAction = -self.getHigher(abs(self.seekAction), config.seek.speeds_backward.value) or -config.seek.speeds_backward.value[-1]
+		else:
+			self.seekAction = self.getLower(abs(self.seekAction), config.seek.speeds_forward.value)
+		if self.seekAction == 2: # use fastforward for x2
+			self.setSeekState(self.makeStateForward(self.seekAction))
+
+	def seekFwd_old(self):
 		seek = self.getSeek()
 		if seek and not (seek.isCurrentlySeekable() & 2):
 			if not self.fast_winding_hint_message_showed and (seek.isCurrentlySeekable() & 1):
@@ -3743,7 +3847,7 @@ class InfoBarSeek:
 			speed = self.getLower(self.seekstate[2], config.seek.speeds_slowmotion.value) or config.seek.speeds_slowmotion.value[0]
 			self.setSeekState(self.makeStateSlowMotion(speed))
 
-	def seekBack(self):
+	def seekBack_old(self):
 		seek = self.getSeek()
 		if seek and not (seek.isCurrentlySeekable() & 2):
 			if not self.fast_winding_hint_message_showed and (seek.isCurrentlySeekable() & 1):
@@ -3851,6 +3955,12 @@ class InfoBarSeek:
 	def __evEOF(self):
 		if self.seekstate == self.SEEK_STATE_EOF:
 			return
+
+		global seek_withjumps_muted
+		if seek_withjumps_muted and eDVBVolumecontrol.getInstance().isMuted():
+			print "STILL MUTED AFTER FFWD/FBACK !!!!!!!! so we unMute"
+			seek_withjumps_muted = False
+			eDVBVolumecontrol.getInstance().volumeUnMute()
 
 		# if we are seeking forward, we try to end up ~1s before the end, and pause there.
 		seekstate = self.seekstate
@@ -4353,19 +4463,25 @@ class InfoBarPiP:
 			self.session.pipshown
 		except:
 			self.session.pipshown = False
-		if SystemInfo.get("NumVideoDecoders", 1) > 1 and isinstance(self, InfoBarEPG):
+
+		self.lastPiPService = None
+
+		if SystemInfo["PIPAvailable"] and isinstance(self, InfoBarEPG):
 			self["PiPActions"] = HelpableActionMap(self, "InfobarPiPActions",
 				{
-					"activatePiP": (self.showPiP, _("Activate PiP")),
+					"activatePiP": (self.activePiP, self.activePiPName),
 				})
 			if self.allowPiP:
 				self.addExtension((self.getShowHideName, self.showPiP, lambda: True), "blue")
 				self.addExtension((self.getMoveName, self.movePiP, self.pipShown), "green")
 				self.addExtension((self.getSwapName, self.swapPiP, self.pipShown), "yellow")
-				# self.addExtension((self.getTogglePipzapName, self.togglePipzap, self.pipShown), "red")
+				self.addExtension((self.getTogglePipzapName, self.togglePipzap, self.pipShown), "red")
 			else:
 				self.addExtension((self.getShowHideName, self.showPiP, self.pipShown), "blue")
 				self.addExtension((self.getMoveName, self.movePiP, self.pipShown), "green")
+
+		self.lastPiPServiceTimeout = eTimer()
+		self.lastPiPServiceTimeout.callback.append(self.clearLastPiPService)
 
 	def pipShown(self):
 		return self.session.pipshown
@@ -4383,7 +4499,7 @@ class InfoBarPiP:
 		return _("Swap services")
 
 	def getMoveName(self):
-		return _("Setup Picture in Picture")
+		return _("Picture in Picture Setup")
 
 	def getTogglePipzapName(self):
 		slist = self.servicelist
@@ -4408,6 +4524,8 @@ class InfoBarPiP:
 			if slist and slist.dopipzap:
 				self.togglePipzap()
 			if self.session.pipshown:
+				self.lastPiPService = self.session.pip.getCurrentServiceReference()
+				self.lastPiPServiceTimeout.startLongTimer(60)
 				del self.session.pip
 				if SystemInfo["LCDMiniTV"]:
 					if config.lcd.modepip.value >= "1":
@@ -4415,48 +4533,85 @@ class InfoBarPiP:
 						f.write(config.lcd.modeminitv.value)
 						f.close()
 				self.session.pipshown = False
+			if hasattr(self, "ScreenSaverTimerStart"):
+				self.ScreenSaverTimerStart()
 		else:
-			self.session.pip = self.session.instantiateDialog(PictureInPicture)
-			self.session.pip.setAnimationMode(0)
-			self.session.pip.show()
-			newservice = self.session.nav.getCurrentlyPlayingServiceReference() or self.servicelist.servicelist.getCurrent()
-			if self.session.pip.playService(newservice):
-				self.session.pipshown = True
-				self.session.pip.servicePath = self.servicelist.getCurrentServicePath()
-				if SystemInfo["LCDMiniTV"]:
-					if config.lcd.modepip.value >= "1":
-						f = open("/proc/stb/lcd/mode", "w")
-						f.write(config.lcd.modepip.value)
-						f.close()
-						f = open("/proc/stb/vmpeg/1/dst_width", "w")
-						f.write("0")
-						f.close()
-						f = open("/proc/stb/vmpeg/1/dst_height", "w")
-						f.write("0")
-						f.close()
-						f = open("/proc/stb/vmpeg/1/dst_apply", "w")
-						f.write("1")
-						f.close()
+			service = self.session.nav.getCurrentService()
+			info = service and service.info()
+			xres = str(info.getInfo(iServiceInformation.sVideoWidth))
+			if int(xres) <= 720 or not getMachineBuild() == 'blackbox7405':
+				self.session.pip = self.session.instantiateDialog(PictureInPicture)
+				self.session.pip.setAnimationMode(0)
+				self.session.pip.show()
+				newservice = self.lastPiPService or self.session.nav.getCurrentlyPlayingServiceReference() or self.servicelist.servicelist.getCurrent()
+				if self.session.pip.playService(newservice):
+					self.session.pipshown = True
+					self.session.pip.servicePath = self.servicelist.getCurrentServicePath()
+					if SystemInfo["LCDMiniTV"]:
+						if config.lcd.modepip.value >= "1":
+							f = open("/proc/stb/lcd/mode", "w")
+							f.write(config.lcd.modepip.value)
+							f.close()
+							f = open("/proc/stb/vmpeg/1/dst_width", "w")
+							f.write("0")
+							f.close()
+							f = open("/proc/stb/vmpeg/1/dst_height", "w")
+							f.write("0")
+							f.close()
+							f = open("/proc/stb/vmpeg/1/dst_apply", "w")
+							f.write("1")
+							f.close()
+				else:
+					newservice = self.session.nav.getCurrentlyPlayingServiceReference() or self.servicelist.servicelist.getCurrent()
+					if self.session.pip.playService(newservice):
+						self.session.pipshown = True
+						self.session.pip.servicePath = self.servicelist.getCurrentServicePath()
+					else:
+						self.lastPiPService = None
+						self.session.pipshown = False
+						del self.session.pip
 			else:
-				self.session.pipshown = False
-				del self.session.pip
+				self.session.open(MessageBox, _("Your %s %s does not support PiP HD") % (getMachineBrand(), getMachineName()), type = MessageBox.TYPE_INFO,timeout = 5 )
+		if self.session.pipshown and hasattr(self, "screenSaverTimer"):
+			self.screenSaverTimer.stop()
+
+	def clearLastPiPService(self):
+		self.lastPiPService = None
+
+	def activePiP(self):
+		if self.servicelist and self.servicelist.dopipzap or not self.session.pipshown:
+			self.showPiP()
+		else:
+			self.togglePipzap()
+
+	def activePiPName(self):
+		if self.servicelist and self.servicelist.dopipzap:
+			return _("Disable Picture in Picture")
+		if self.session.pipshown:
+			return _("Zap focus to Picture in Picture")
+		else:
+			return _("Activate Picture in Picture")
 
 	def swapPiP(self):
-		swapservice = self.session.nav.getCurrentlyPlayingServiceOrGroup()
-		pipref = self.session.pip.getCurrentService()
-		if swapservice and pipref and pipref.toString() != swapservice.toString():
-			currentServicePath = self.servicelist.getCurrentServicePath()
-			self.servicelist.setCurrentServicePath(self.session.pip.servicePath, doZap=False)
-			self.session.pip.playService(swapservice)
-			self.session.nav.stopService() # stop portal
-			self.session.nav.playService(pipref, checkParentalControl=False, adjust=False)
-			self.session.pip.servicePath = currentServicePath
-			if self.servicelist.dopipzap:
-				# This unfortunately won't work with subservices
-				self.servicelist.setCurrentSelection(self.session.pip.getCurrentService())
+		if self.pipShown():
+			swapservice = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+			pipref = self.session.pip.getCurrentService()
+			if swapservice and pipref and pipref.toString() != swapservice.toString():
+				currentServicePath = self.servicelist.getCurrentServicePath()
+				currentBouquet = self.servicelist and self.servicelist.getRoot()
+				self.servicelist.setCurrentServicePath(self.session.pip.servicePath, doZap=False)
+				self.session.pip.playService(swapservice)
+				self.session.nav.stopService() # stop portal
+				self.session.nav.playService(pipref, checkParentalControl=False, adjust=False)
+				self.session.pip.servicePath = currentServicePath
+				self.session.pip.servicePath[1] = currentBouquet
+				if self.servicelist.dopipzap:
+					# This unfortunately won't work with subservices
+					self.servicelist.setCurrentSelection(self.session.pip.getCurrentService())
 
 	def movePiP(self):
-		self.session.open(PiPSetup, pip = self.session.pip)
+		if self.pipShown():
+			self.session.open(PiPSetup, pip = self.session.pip)
 
 	def pipDoHandle0Action(self):
 		use = config.usage.pip_zero_button.value
@@ -4494,6 +4649,7 @@ class InfoBarInstantRecord:
 			{
 				"instantRecord": (self.instantRecord, _("Instant recording...")),
 			})
+		self.SelectedInstantServiceRef = None
 		if isStandardInfoBar(self):
 			self.recording = []
 		else:
@@ -4698,7 +4854,8 @@ class InfoBarInstantRecord:
 							identical += 1
 		return timers > identical
 
-	def instantRecord(self):
+	def instantRecord(self, serviceRef=None):
+		self.SelectedInstantServiceRef = serviceRef
 		pirr = preferredInstantRecordPath()
 		if not findSafeRecordPath(pirr) and not findSafeRecordPath(defaultMoviePath()):
 			if not pirr:
@@ -5061,13 +5218,13 @@ class InfoBarResolutionSelection:
 	def resolutionSelection(self):
 		f = open("/proc/stb/vmpeg/0/xres", "r")
 		xresString = f.read()
-		f.close()		
+		f.close()
 		f = open("/proc/stb/vmpeg/0/yres", "r")
 		yresString = f.read()
 		f.close()
 		if getBoxType().startswith('azbox'):
 			fpsString = '50000'
-		else:	
+		else:
 			try:
 				f = open("/proc/stb/vmpeg/0/framerate", "r")
 				fpsString = f.read()
@@ -5075,12 +5232,23 @@ class InfoBarResolutionSelection:
 			except:
 				print"[InfoBarResolutionSelection] Error open /proc/stb/vmpeg/0/framerate !!"
 				fpsString = '50000'
-		
+
 		xres = int(xresString, 16)
 		yres = int(yresString, 16)
 		fps = int(fpsString)
 		fpsFloat = float(fps)
 		fpsFloat = fpsFloat/1000
+
+		# do we need a new sorting with this way here?
+		# or should we disable some choices?
+		choices = []
+		if os.path.exists("/proc/stb/video/videomode_choices"):
+			f = open("/proc/stb/video/videomode_choices")
+			values = f.readline().replace("\n", "").replace("pal ", "").replace("ntsc ", "").split(" ", -1)
+			for x in values:
+				entry = x.replace('i50', 'i@50hz').replace('i60', 'i@60hz').replace('p23', 'p@23.976hz').replace('p24', 'p@24hz').replace('p25', 'p@25hz').replace('p29', 'p@29hz').replace('p30', 'p@30hz').replace('p50', 'p@50hz'), x
+				choices.append(entry)
+			f.close()
 
 		selection = 0
 		tlist = []
@@ -5088,17 +5256,9 @@ class InfoBarResolutionSelection:
 		tlist.append((_("Auto(not available)"), "auto"))
 		tlist.append(("Video: " + str(xres) + "x" + str(yres) + "@" + str(fpsFloat) + "hz", ""))
 		tlist.append(("--", ""))
-		tlist.append(("576i", "576i50"))
-		tlist.append(("576p", "576p50"))
-		tlist.append(("720p@50hz", "720p50"))
-		tlist.append(("720p@60hz", "720p60"))
-		tlist.append(("1080i@50hz", "1080i50"))
-		tlist.append(("1080i@60hz", "1080i60"))
-		tlist.append(("1080p@23.976hz", "1080p23"))
-		tlist.append(("1080p@24hz", "1080p24"))
-		tlist.append(("1080p@25hz", "1080p25"))
-		tlist.append(("1080p@29hz", "1080p29"))
-		tlist.append(("1080p@30hz", "1080p30"))
+		if choices != []:
+			for x in choices:
+				tlist.append(x)
 
 		keys = ["green", "yellow", "blue", "", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" ]
 
@@ -5118,7 +5278,7 @@ class InfoBarResolutionSelection:
 				if Resolution[1] != "auto":
 					f = open("/proc/stb/video/videomode", "w")
 					f.write(Resolution[1])
-					f.close()					
+					f.close()
 					#from enigma import gMainDC
 					#gMainDC.getInstance().setResolution(-1, -1)
 					self.ExGreen_doHide()
@@ -5282,7 +5442,8 @@ class InfoBarCueSheetSupport:
 		self.downloadCuesheet()
 
 		self.resume_point = None
-		if self.ENABLE_RESUME_SUPPORT:
+		service = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+		if self.ENABLE_RESUME_SUPPORT and not(service and service.toString().startswith("4369:")): #when resume support and not a DVD
 			for (pts, what) in self.cut_list:
 				if what == self.CUT_TYPE_LAST:
 					last = pts
@@ -5625,11 +5786,13 @@ class InfoBarServiceErrorPopupSupport:
 		Notifications.RemovePopup(id = "ZapError")
 
 	def __tuneFailed(self):
-		if not config.usage.hide_zap_errors.value:
+		if not config.usage.hide_zap_errors.value or not config.usage.remote_fallback_enabled.value:
 			service = self.session.nav.getCurrentService()
 			info = service and service.info()
 			error = info and info.getInfo(iServiceInformation.sDVBState)
-
+			if not config.usage.remote_fallback_enabled.value and (error == eDVBServicePMTHandler.eventMisconfiguration or error == eDVBServicePMTHandler.eventNoResources):
+				self.session.nav.currentlyPlayingServiceReference = None
+				self.session.nav.currentlyPlayingServiceOrGroup = None
 			if error == self.last_error:
 				error = None
 			else:
@@ -5648,7 +5811,7 @@ class InfoBarServiceErrorPopupSupport:
 				eDVBServicePMTHandler.eventMisconfiguration: _("Service unavailable!\nCheck tuner configuration!"),
 			}.get(error) #this returns None when the key not exist in the dict
 
-			if error:
+			if error and not config.usage.hide_zap_errors.value:
 				self.closeNotificationInstantiateDialog()
 				if hasattr(self, "dishDialog") and not self.dishDialog.dishState():
 					Notifications.AddPopup(text = error, type = MessageBox.TYPE_ERROR, timeout = 5, id = "ZapError")
@@ -5924,3 +6087,29 @@ class InfoBarPowersaver:
 		elif not Screens.Standby.inStandby:
 			print "[InfoBarPowersaver] goto standby"
 			self.session.open(Screens.Standby.Standby)
+
+print bcolors.OKGREEN + "~~~~ read box informations ~~~~~~~~~" + bcolors.ENDC
+print bcolors.OKBLUE + "MachineName =", getMachineName() + bcolors.ENDC
+print bcolors.OKBLUE + "MachineBrand =", getMachineBrand() + bcolors.ENDC
+print bcolors.OKBLUE + "BoxType =", getBoxType() + bcolors.ENDC
+print bcolors.OKBLUE + "OEM =", getBrandOEM() + bcolors.ENDC
+print bcolors.OKBLUE + "Driverdate =", getDriverDate() + bcolors.ENDC
+print bcolors.OKBLUE + "Imageversion =", getImageVersion() + bcolors.ENDC
+print bcolors.OKBLUE + "Imagebuild =", getImageBuild() + bcolors.ENDC
+print bcolors.OKGREEN + "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" + bcolors.ENDC
+
+try:
+	os.system("rm -f /etc/enigma2/boxinformations")
+	os.system("touch /etc/enigma2/boxinformations")
+	os.system("echo ~~~ Box Info ~~~~~~~~~~~~~~~~~~~~"" >> /etc/enigma2/boxinformations")
+	os.system("echo getMachineName = " + getMachineName() + " >> /etc/enigma2/boxinformations")
+	os.system("echo getMachineBrand = " + getMachineBrand() + " >> /etc/enigma2/boxinformations")
+	os.system("echo getBoxType = " + getBoxType() + " >> /etc/enigma2/boxinformations")
+	os.system("echo getBrandOEM = " + getBrandOEM() + " >> /etc/enigma2/boxinformations")
+	os.system("echo getDriverDate = " + getDriverDate() + " >> /etc/enigma2/boxinformations")
+	os.system("echo getImageVersion = " + getImageVersion() + " >> /etc/enigma2/boxinformations")
+	os.system("echo getImageBuild = " + getImageBuild() + " >> /etc/enigma2/boxinformations")
+	os.system("echo ~~~ CPU Info ~~~~~~~~~~~~~~~~~~~~"" >> /etc/enigma2/boxinformations")
+	os.system("cat /proc/cpuinfo >> /etc/enigma2/boxinformations")
+except:
+    pass

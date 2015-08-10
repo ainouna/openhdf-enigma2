@@ -108,7 +108,7 @@ class About(Screen):
 			f.close()
 		if tempinfo and int(tempinfo.replace('\n', '')) > 0:
 			mark = str('\xc2\xb0')
-			AboutText += _("System Temp:\t%s") % tempinfo.replace('\n', '') + mark + "C\n"
+			AboutText += _("System temp:\t%s") % tempinfo.replace('\n', '').replace(' ','') + mark + "C\n"
 	
 		tempinfo = ""
 		if path.exists('/proc/stb/fp/temp_sensor_avs'):
@@ -117,7 +117,7 @@ class About(Screen):
 			f.close()
 		if tempinfo and int(tempinfo.replace('\n', '')) > 0:
 			mark = str('\xc2\xb0')
-			AboutText += _("Processor Temp:\t%s") % tempinfo.replace('\n', '') + mark + "C\n"
+			AboutText += _("Processor temp:\t%s") % tempinfo.replace('\n', '').replace(' ','') + mark + "C\n"
 		AboutLcdText = AboutText.replace('\t', ' ')
 
 		self["AboutScrollLabel"] = ScrollLabel(AboutText)
@@ -558,14 +558,14 @@ class ViewGitLog(Screen):
 	def __init__(self, session, args=None):
 		Screen.__init__(self, session)
 		self.skinName = "SoftwareUpdateChanges"
-		self.setTitle(_("OE-A Changes"))
-		self.logtype = 'oe'
+		self.setTitle(_("OpenHDF E2 Changes"))
+		self.logtype = 'e2'
 		self["text"] = ScrollLabel()
 		self['title_summary'] = StaticText()
 		self['text_summary'] = StaticText()
 		self["key_red"] = Button(_("Close"))
 		self["key_green"] = Button(_("OK"))
-		self["key_yellow"] = Button(_("Show OpenHDF Log"))
+		self["key_yellow"] = Button(_("Last Image Updates"))
 		self["myactions"] = ActionMap(['ColorActions', 'OkCancelActions', 'DirectionActions'],
 		{
 			'cancel': self.closeRecursive,
@@ -581,11 +581,7 @@ class ViewGitLog(Screen):
 		self.onLayoutFinish.append(self.getlog)
 
 	def changelogtype(self):
-		if self.logtype == 'oe':
-			self["key_yellow"].setText(_("Show Last Updates"))
-			self.setTitle(_("OpenHDF E2 Changes"))
-			self.logtype = 'e2'
-		elif self.logtype == 'e2':
+		if self.logtype == 'e2':
 			self["key_yellow"].setText(_("Show OE-A Log"))
 			self.setTitle(_("Last Image Updates"))
 			self.logtype = 'last-upgrades'
@@ -593,6 +589,10 @@ class ViewGitLog(Screen):
 			self["key_yellow"].setText(_("Show OpenHDF Log"))
 			self.setTitle(_("OE-A Changes"))
 			self.logtype = 'oe'
+		elif self.logtype == 'oe':
+			self["key_yellow"].setText(_("Show Last Updates"))
+			self.setTitle(_("OpenHDF E2 Changes"))
+			self.logtype = 'e2'
 		self.getlog()
 
 	def pageUp(self):

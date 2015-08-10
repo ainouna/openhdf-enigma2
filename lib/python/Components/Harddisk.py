@@ -116,24 +116,26 @@ class Harddisk:
 			self.timer.callback.remove(self.runIdle)
 
 	def bus(self):
-		# CF (7025 specific)
+		ret = _("External")
+		# SD/MMC(F1 specific)
 		if self.type == DEVTYPE_UDEV:
-			ide_cf = False	# FIXME
+			card = "sdhci" in self.phys_path
+			type_name = " (SD/MMC)"
+		# CF(7025 specific)
 		elif self.type == DEVTYPE_DEVFS:
-			ide_cf = self.device[:2] == "hd" and "host0" not in self.dev_path
+			card = self.device[:2] == "hd" and "host0" not in self.dev_path
+			type_name = " (CF)"
 
 		hw_type = HardwareInfo().get_device_name()
 		if hw_type == 'elite' or hw_type == 'premium' or hw_type == 'premium+' or hw_type == 'ultra' :
 			internal = "ide" in self.phys_path
 		else:
-			internal = "pci" in self.phys_path or "ahci" in self.phys_path
+			internal = ("pci" or "ahci") in self.phys_path
 
-		if ide_cf:
-			ret = _("External (CF)")
+		if card:
+			ret += type_name
 		elif internal:
 			ret = _("Internal")
-		else:
-			ret = _("External")
 		return ret
 
 	def diskSize(self):
@@ -167,8 +169,10 @@ class Harddisk:
 				vendor = readFile(self.phys_path + '/vendor')
 				model = readFile(self.phys_path + '/model')
 				return vendor + '(' + model + ')'
+			elif self.device.startswith('mmcblk0'):
+				return readFile(self.sysfsPath('device/name'))
 			else:
-				raise Exception, "no hdX or sdX"
+				raise Exception, "no hdX or sdX or mmcX"
 		except Exception, e:
 			print "[Harddisk] Failed to get model:", e
 			return "-?-"
@@ -264,7 +268,7 @@ class Harddisk:
 		res = -1
 		if self.type == DEVTYPE_UDEV:
 			# we can let udev do the job, re-read the partition table
-			res = os.system('sfdisk -R ' + self.disk_path)
+			res = os.system('hdparm -z ' + self.disk_path)
 			# give udev some time to make the mount, which it will do asynchronously
 			from time import sleep
 			sleep(3)
@@ -303,8 +307,8 @@ class Harddisk:
 
 		task = Task.LoggingTask(job, _("Rereading partition table"))
 		task.weighting = 1
-		task.setTool('sfdisk')
-		task.args.append('-R')
+		task.setTool('hdparm')
+		task.args.append('-z')
 		task.args.append(self.disk_path)
 
 		task = Task.ConditionTask(job, _("Waiting for partition"), timeoutCount=20)
@@ -517,7 +521,7 @@ class Harddisk:
 			Console().ePopen(("sdparm", "sdparm", "--flexible", "--readonly", "--command=stop", self.disk_path))
 		else:
 			Console().ePopen(("hdparm", "hdparm", "-y", self.disk_path))
-			
+
 	def setIdleTime(self, idle):
 		self.max_idle_time = idle
 		if self.idle_running:
@@ -639,6 +643,21 @@ DEVICEDB = \
 		"/devices/pci0000:01/0000:01:00.0/host0/target0:0:0/0:0:0:0": _("SATA"),
 		"/devices/platform/brcm-ehci.0/usb1/1-2/1-2:1.0": _("Upper USB"),
 		"/devices/platform/brcm-ehci.0/usb1/1-1/1-1:1.0": _("Lower USB"),
+	},
+	"dm820":
+	{
+		"/devices/platform/ehci-brcm.0/": _("Back, lower USB"),
+		"/devices/platform/ehci-brcm.1/": _("Back, upper USB"),
+		"/devices/platform/ehci-brcm.2/": _("Internal USB"),
+		"/devices/platform/ehci-brcm.3/": _("Internal USB"),
+		"/devices/platform/ohci-brcm.0/": _("Back, lower USB"),
+		"/devices/platform/ohci-brcm.1/": _("Back, upper USB"),
+		"/devices/platform/ohci-brcm.2/": _("Internal USB"),
+		"/devices/platform/ohci-brcm.3/": _("Internal USB"),
+		"/devices/platform/sdhci-brcmstb.0/": _("eMMC"),
+		"/devices/platform/sdhci-brcmstb.1/": _("SD"),
+		"/devices/platform/strict-ahci.0/ata1/": _("SATA"),     # front
+		"/devices/platform/strict-ahci.0/ata2/": _("SATA"),     # back
 	},
 	"dm800se":
 	{
@@ -801,7 +820,7 @@ class HarddiskManager:
 				self.on_partition_list_change("add", p)
 			# see if this is a harddrive
 			l = len(device)
-			if l and not device[l-1].isdigit():
+			if l and (not device[l-1].isdigit() or device == 'mmcblk0'):
 				self.hdd.append(Harddisk(device, removable))
 				self.hdd.sort()
 				SystemInfo["Harddisk"] = True
@@ -864,7 +883,7 @@ class HarddiskManager:
 
 	def getUserfriendlyDeviceName(self, dev, phys):
 		dev, part = self.splitDeviceName(dev)
-		description = "External Storage %s" % dev
+		description = _("External Storage %s") % dev
 		try:
 			description = readFile("/sys" + phys + "/model")
 		except IOError, s:
@@ -875,7 +894,7 @@ class HarddiskManager:
 				description = pdescription
 		# not wholedisk and not partition 1
 		if part and part != 1:
-			description += " (Partition %d)" % part
+			description += _(" (Partition %d)") % part
 		return description
 
 	def addMountedPartition(self, device, desc):
@@ -961,7 +980,7 @@ class MountTask(Task.LoggingTask):
 		if self.hdd.type == DEVTYPE_UDEV:
 			# we can let udev do the job, re-read the partition table
 			# Sorry for the sleep 2 hack...
-			self.setCmdline('sleep 2; sfdisk -R ' + self.hdd.disk_path)
+			self.setCmdline('sleep 2; hdparm -z ' + self.hdd.disk_path)
 			self.postconditions.append(Task.ReturncodePostcondition())
 
 

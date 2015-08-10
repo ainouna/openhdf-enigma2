@@ -26,7 +26,7 @@ class VirtualKeyBoardEntryComponent:
 class VirtualKeyBoard(Screen):
 	def __init__(self, session, title="", **kwargs):
 		Screen.__init__(self, session)
-		self.setTitle(_(title))
+		self.setTitle(_("Virtual KeyBoard"))
 		self.keys_list = []
 		self.shiftkeys_list = []
 		self.lang = language.getLanguage()
@@ -79,6 +79,7 @@ class VirtualKeyBoard(Screen):
 			{
 				"gotAsciiCode": self.keyGotAscii,
 				"ok": self.okClicked,
+				"OKLong": self.okLongClicked,
 				"cancel": self.exit,
 				"left": self.left,
 				"right": self.right,
@@ -355,6 +356,14 @@ class VirtualKeyBoard(Screen):
 
 		else:
 			self["text"].char(text)
+
+	def okLongClicked(self):
+		self.smsChar = None
+		text = (self.shiftMode and self.shiftkeys_list or self.keys_list)[self.selectedKey / 12][self.selectedKey % 12].encode("UTF-8")
+
+		if text == "BACKSPACE":
+			self["text"].deleteAllChars()
+			self["text"].update()
 
 	def ok(self):
 		self.close(self["text"].getText().encode("UTF-8"))

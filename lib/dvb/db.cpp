@@ -375,6 +375,7 @@ void eDVBDB::parseServiceData(ePtr<eDVBService> s, std::string str)
 		else if (p == 'f')
 		{
 			sscanf(v.c_str(), "%x", &s->m_flags);
+			s->m_flags &= ~eDVBService::dxDontshow;
 		} else if (p == 'c')
 		{
 			int cid, val;
@@ -1033,35 +1034,44 @@ PyObject *eDVBDB::readSatellites(ePyObject sat_list, ePyObject sat_dict, ePyObje
 	if (!PyDict_Check(tp_dict)) {
 		PyErr_SetString(PyExc_StandardError,
 			"type error");
-			eDebug("arg 2 is not a python dict");
-		return NULL;
+			eDebug("arg 2 (tp_dict) is not a python dict");
+		Py_INCREF(Py_False);
+		return Py_False;
 	}
 	else if (!PyDict_Check(sat_dict))
 	{
 		PyErr_SetString(PyExc_StandardError,
 			"type error");
-			eDebug("arg 1 is not a python dict");
-		return NULL;
+			eDebug("arg 1 (sat_dict) is not a python dict");
+		Py_INCREF(Py_False);
+		return Py_False;
 	}
 	else if (!PyList_Check(sat_list))
 	{
 		PyErr_SetString(PyExc_StandardError,
 			"type error");
-			eDebug("arg 0 is not a python list");
-		return NULL;
+			eDebug("arg 0 (sat_list) is not a python list");
+		Py_INCREF(Py_False);
+		return Py_False;
 	}
 	XMLTree tree;
-	const char* satellitesFilename = "/etc/enigma2/satellites.xml";
-	if (::access(satellitesFilename, R_OK) < 0)
+	std::string satellitesFilename = eEnv::resolve("${sysconfdir}/enigma2/satellites.xml").c_str();
+	if (::access(satellitesFilename.c_str(), R_OK) < 0)
 	{
-		satellitesFilename = "/etc/tuxbox/satellites.xml";
+		satellitesFilename = eEnv::resolve("${sysconfdir}/tuxbox/satellites.xml").c_str();
+		if (::access(satellitesFilename.c_str(), R_OK) < 0)
+		{
+			eDebug("satellites.xml not found");
+			Py_INCREF(Py_False);
+			return Py_False;
+		}
 	}
 	tree.setFilename(satellitesFilename);
 	tree.read();
 	Element *root = tree.getRoot();
 	if (!root)
 	{
-		eDebug("couldn't open /etc/tuxbox/satellites.xml!!");
+		eDebug("satellites.xml is maybe corrupted");
 		Py_INCREF(Py_False);
 		return Py_False;
 	}
@@ -1291,8 +1301,7 @@ PyObject *eDVBDB::readCables(ePyObject cab_list, ePyObject tp_dict)
 				}
 				if (freq && sr)
 				{
-					while (freq > 999999)
-						freq /= 10;
+					freq /= 1000;
 					tuple = PyTuple_New(7);
 					PyTuple_SET_ITEM(tuple, 0, PyInt_FromLong(1));
 					PyTuple_SET_ITEM(tuple, 1, PyInt_FromLong(freq));

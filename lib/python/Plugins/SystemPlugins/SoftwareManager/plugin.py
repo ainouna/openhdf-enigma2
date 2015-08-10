@@ -75,11 +75,12 @@ if boxtype == "odinm9" or boxtype == "maram9":
 	config.plugins.configurationbackup.backuplocation = ConfigText(default = '/media/backup/', visible_width = 50, fixed_size = False)
 else:
 	config.plugins.configurationbackup.backuplocation = ConfigText(default = '/media/hdd/', visible_width = 50, fixed_size = False)
-config.plugins.configurationbackup.backupdirs = ConfigLocations(default=[eEnv.resolve('${sysconfdir}/enigma2/'), '/etc/CCcam.cfg', '/usr/keys/CCcam.cfg',
-																		 '/etc/network/interfaces', '/etc/wpa_supplicant.conf', '/etc/wpa_supplicant.ath0.conf',
-																		 '/etc/wpa_supplicant.wlan0.conf', '/etc/resolv.conf', '/etc/default_gw', '/etc/hostname',
+config.plugins.configurationbackup.backupdirs = ConfigLocations(default=[eEnv.resolve('${sysconfdir}/enigma2/'), '/etc/CCcam.cfg', 
+																		 '/etc/CCcam.prio', '/usr/keys/', '/usr/bin/*cam*', '/etc/init.d/softcam*', '/etc/tuxbox/config/', 
+																		 '/etc/*.emu', '/etc/auto.network', '/etc/default/dropbear', '/home/root/.ssh/', '/etc/samba/',  
+																		 '/etc/fstab', '/etc/inadyn.conf', '/etc/network/interfaces', '/etc/wpa_supplicant.conf', '/etc/default_gw', 
+																		 '/etc/wpa_supplicant.ath0.conf', '/etc/wpa_supplicant.wlan0.conf', '/etc/resolv.conf', '/etc/hostname', 
 																		 eEnv.resolve("${datadir}/enigma2/keymap.usr"), eEnv.resolve("${datadir}/enigma2/keymap.ntr")])
-
 
 config.plugins.softwaremanager = ConfigSubsection()
 config.plugins.softwaremanager.overwriteSettingsFiles = ConfigYesNo(default=False)
@@ -183,9 +184,9 @@ class UpdatePluginMenu(Screen):
 			self.list.append(("software-update", _("Software update"), _("\nOnline update of your %s %s software.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
 			self.list.append(("software-restore", _("Software restore"), _("\nRestore your %s %s with a new firmware.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
 			self.list.append(("install-extensions", _("Manage extensions"), _("\nManage extensions or plugins for your %s %s") % (getMachineBrand(), getMachineName()) + self.oktext, None))
-			self.list.append(("backup-image", _("Backup Image"), _("\nBackup your running %s %s image to HDD or USB.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
+			self.list.append(("backup-image", _("Image Full-Backup"), _("\nBackup your running %s %s image to HDD or USB.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
 			if not getBoxType().startswith('az') and not getBoxType().startswith('dream') and not getBoxType().startswith('ebox'):
-				self.list.append(("flash-online", _("Flash Image Online"), _("\nFlash on the fly your %s %s.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
+				self.list.append(("flash-online", _("Image Online-Flash"), _("\nFlash on the fly your %s %s.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
 			self.list.append(("system-backup", _("Backup system settings"), _("\nBackup your %s %s settings.") % (getMachineBrand(), getMachineName()) + self.oktext + "\n\n" + self.infotext, None))
 			self.list.append(("system-restore",_("Restore system settings"), _("\nRestore your %s %s settings.") % (getMachineBrand(), getMachineName()) + self.oktext, None))
 			self.list.append(("ipkg-install", _("Install local extension"),  _("\nScan for local extensions and install them.") + self.oktext, None))
@@ -362,7 +363,7 @@ class UpdatePluginMenu(Screen):
 					self.session.openWithCallback(self.backupDone,BackupScreen, runBackup = True)
 				elif (currentEntry == "system-restore"):
 					if os_path.exists(self.fullbackupfilename):
-						self.session.openWithCallback(self.startRestore, MessageBox, _("Are you sure you want to restore the backup?\nYour receiver will restart after the backup has been restored!"))
+						self.session.openWithCallback(self.startRestore, MessageBox, _("Are you sure you want to restore the backup?\nYour receiver will restart after the backup has been restored!"), default = False)
 					else:
 						self.session.open(MessageBox, _("Sorry, no backups found!"), MessageBox.TYPE_INFO, timeout = 10)
 				elif (currentEntry == "ipkg-install"):
@@ -1544,11 +1545,11 @@ class UpdatePlugin(Screen):
 		self.activityTimer.start(100, False)
 
 	def CheckDate(self):
-		# Check if image is not to old for update (max 30days)
+		# Check if image is not to old for update (max 60days)
 		self.CheckDateDone = True
 		tmpdate = getEnigmaVersionString()
 		imageDate = date(int(tmpdate[0:4]), int(tmpdate[5:7]), int(tmpdate[8:10]))
-		datedelay = imageDate +  timedelta(days=30)
+		datedelay = imageDate +  timedelta(days=60)
 		message = _("Your image is out of date!\n\n"
 				"After such a long time, there is a risk that your %s %s  will not\n"
 				"boot after online-update, or will show disfunction in running Image.\n\n"
@@ -1616,7 +1617,7 @@ class UpdatePlugin(Screen):
 			if doUpdate:
 				# Ask for Update,
 				message += _("Do you want to update your %s %s?") % (getMachineBrand(), getMachineName()) + "\n" + _("After pressing OK, please wait!")
-				self.session.openWithCallback(self.runUpgrade, MessageBox, message, default = default, picon = picon)
+				self.session.openWithCallback(self.runUpgrade, MessageBox, message, default = False, picon = picon)
 			else:
 				# Don't Update RED LIGHT !!
 				self.session.open(MessageBox, message, picon, timeout = 20)
@@ -1932,7 +1933,7 @@ class IPKGSource(Screen):
 
 class PacketManager(Screen, NumericalTextInput):
 	skin = """
-		<screen name="PacketManager" position="center,center" size="530,420" title="Packet manager" >
+		<screen name="Packet Manager" position="center,center" size="530,420" title="Packet manager" >
 			<ePixmap pixmap="buttons/red.png" position="0,0" size="140,40" alphatest="on" />
 			<ePixmap pixmap="buttons/green.png" position="140,0" size="140,40" alphatest="on" />
 			<widget source="key_red" render="Label" position="0,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#9f1313" transparent="1" />
@@ -2477,7 +2478,7 @@ def UpgradeMain(session, **kwargs):
 	session.open(UpdatePluginMenu)
 
 def startSetup(menuid):
-	if menuid != "setup":
+	if menuid != "software_menu":
 		return [ ]
 	return [(_("Software management"), UpgradeMain, "software_manager", 50)]
 
