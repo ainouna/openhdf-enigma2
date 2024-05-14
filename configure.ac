@@ -1,4 +1,4 @@
-AC_INIT([enigma2],[3.0.0],[enigma2-devel@lists.elitedvb.net])
+AC_INIT([enigma2],[6.5],[https://feed.hdfreaks.cc])
 AM_INIT_AUTOMAKE([dist-bzip2 no-define tar-pax -Wno-portability])
 AC_CONFIG_HEADERS([enigma2_config.h])
 
@@ -36,7 +36,60 @@ AM_CONDITIONAL(HAVE_FAKE_GIT_DIR, test -f "$srcdir/.git/last_commit_info")
 dnl versions of gstreamer and plugins-base
 AC_ARG_WITH(gstversion,
 	AS_HELP_STRING([--with-gstversion],[use gstreamer version (major.minor)]),
-	[GST_MAJORMINOR=$withval],[GST_MAJORMINOR=0.10])
+	[GST_MAJORMINOR=$withval],[GST_MAJORMINOR=1.0])
+
+AC_ARG_ENABLE(run_from_usb,
+	[  --enable-run_from_usb      enable run_from_usb stuff],
+	[AC_DEFINE(ENABLE_RUN_FROM_USB, 1, [enable run_from_usb stuff])])
+AM_CONDITIONAL(ENABLE_RUN_FROM_USB, test "$enable_run_from_usb" = "yes")
+if test "$run_from_usb" = "yes"; then
+	AC_DEFINE(ENABLE_RUN_FROM_USB, 1, [enable run_from_usb stuff])
+fi
+
+AC_ARG_ENABLE(hs7429,
+	[  --enable-hs7429            enable hs7429 stuff],
+	[AC_DEFINE(ENABLE_HS7429, 1, [enable hs7429 stuff])])
+	
+AM_CONDITIONAL(ENABLE_HS7429, test "$enable_hs7429" = "yes")
+if test "$enable_hs7429" = "yes"; then
+	AC_DEFINE(ENABLE_HS7429, 1, [enable hs7429 stuff])
+fi
+
+AC_ARG_ENABLE(spark,
+	[  --enable-spark          enable spark stuff],
+	[AC_DEFINE(ENABLE_SPARK,1,[enable spark stuff])])
+
+AM_CONDITIONAL(ENABLE_SPARK,test "$enable_spark" = "yes")
+if test "$enable_spark" = "yes"; then
+	AC_DEFINE(ENABLE_SPARK,1,[enable spark stuff])
+fi
+
+AC_ARG_ENABLE(spark7162,
+	[  --enable-spark7162          enable spark7162 stuff],
+	[AC_DEFINE(ENABLE_SPARK7162,1,[enable spark7162 stuff])])
+
+AM_CONDITIONAL(ENABLE_SPARK7162,test "$enable_spark7162" = "yes")
+if test "$enable_spark7162" = "yes"; then
+	AC_DEFINE(ENABLE_SPARK7162,1,[enable spark7162 stuff])
+fi
+
+AC_ARG_ENABLE(libeplayer3,
+	[  --enable-libeplayer3          enable TDT libeplayer3 as player engine supportt],
+	[AC_DEFINE(ENABLE_LIBEPLAYER3,1,[enable TDT libeplayer3 as player engine support])])
+
+AM_CONDITIONAL(ENABLE_LIBEPLAYER3,test "$enable_libeplayer3" = "yes")
+if test "$enable_libeplayer3" = "yes"; then
+	AC_DEFINE(ENABLE_LIBEPLAYER3,1,[include TDT libeplayer3 as player engine support])
+fi
+
+AC_ARG_ENABLE(mediafwgstreamer,
+	[  --enable-mediafwgstreamer      enable gstreamer as player engine supportt],
+	[AC_DEFINE(ENABLE_MEDIAFWGSTREAMER,1,[enable gstreamer as player engine support])])
+
+AM_CONDITIONAL(ENABLE_MEDIAFWGSTREAMER,test "$enable_mediafwgstreamer" = "yes")
+if test "$enable_mediafwgstreamer" = "yes"; then
+	AC_DEFINE(ENABLE_MEDIAFWGSTREAMER,1,[include gstreamer as player engine support])
+fi
 
 PKG_CHECK_MODULES(BASE, [freetype2 fribidi gstreamer-$GST_MAJORMINOR gstreamer-pbutils-$GST_MAJORMINOR libdvbsi++ libpng libxml-2.0 sigc++-1.2 libssl libcrypto])
 PKG_CHECK_MODULES(LIBDDVD, libdreamdvd, HAVE_LIBDDVD="yes", HAVE_LIBDDVD="no")
@@ -79,6 +132,7 @@ AM_CONDITIONAL(EDISION, test `echo "$BOXTYPE" | cut -b 1-4` == "opti")
 AM_CONDITIONAL(JEPSSEN, test `echo "$BOXTYPE" | cut -b 1-5` == "media")
 AM_CONDITIONAL(SOGNO, test `echo "$BOXTYPE" | cut -b 1-5` == "sogno")
 AM_CONDITIONAL(SPARK, test `echo "$BOXTYPE" | cut -b 1-5` == "spark")
+AM_CONDITIONAL(HS7429, test `echo "$BOXTYPE" | cut -b 1-5` == "hs7429")
 AM_CONDITIONAL(EVO, test `echo "$BOXTYPE" | cut -b 1-4` == "enfi")
 AM_CONDITIONAL(MIRACLEBOX, test `echo "$BOXTYPE" | cut -b 1-2` == "mb")
 AM_CONDITIONAL(AZBOXME, test "$BOXTYPE" == azboxme)
@@ -447,6 +501,10 @@ if test "$BOXTYPE" == "tmtwin" -o "$BOXTYPE" == "tm2t" -o "$BOXTYPE" == "tmsingl
 fi
 
 if test "$BOXTYPE" == "spark" -o "$BOXTYPE" == "spark7162"; then
+	AC_DEFINE(FORCE_ADVANCED_REMOTE, 1,[define to fixup the input device identification when the remote control is actually an 'advanced' remote (with play/forward/rewind keys)])
+fi
+
+if test "$MACHINEBUILD" == "hs7429" ; then
 	AC_DEFINE(FORCE_ADVANCED_REMOTE, 1,[define to fixup the input device identification when the remote control is actually an 'advanced' remote (with play/forward/rewind keys)])
 fi
 
